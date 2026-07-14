@@ -49,6 +49,7 @@
         <v-btn
           v-if="sourceLabel"
           :href="recipe.orgURL || undefined"
+          :title="recipe.orgURL || undefined"
           target="_blank"
           rel="noopener noreferrer"
           variant="tonal"
@@ -85,9 +86,10 @@
 <script setup lang="ts">
 import { useClipboard, useShare } from "@vueuse/core";
 import { usePageState } from "~/composables/recipe-page/shared-state";
+import { getMacroCells } from "~/composables/recipes/use-macro-summary";
 import { alert } from "~/composables/use-toast";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
-import type { Nutrition, Recipe } from "~/lib/api/types/recipe";
+import type { Recipe } from "~/lib/api/types/recipe";
 
 const props = defineProps<{ recipe: NoUndefinedField<Recipe> }>();
 
@@ -100,25 +102,7 @@ const groupSlug = computed(
   () => (route.params.groupSlug as string) || auth.user?.value?.groupSlug || "",
 );
 
-/** Format a nutrition string: "106.0" -> "106", "10.5" -> "10.5", null -> "". */
-function fmt(value?: string | null): string {
-  const raw = String(value ?? "").trim();
-  if (!raw) {
-    return "";
-  }
-  const n = Number.parseFloat(raw);
-  return Number.isFinite(n) ? String(n) : raw;
-}
-
-const macroCells = computed(() => {
-  const n: Nutrition = props.recipe.nutrition || {};
-  return [
-    { key: "calories", value: fmt(n.calories), unit: "", label: "kcal" },
-    { key: "protein", value: fmt(n.proteinContent), unit: "g", label: "protein" },
-    { key: "carbs", value: fmt(n.carbohydrateContent), unit: "g", label: "carbs" },
-    { key: "fat", value: fmt(n.fatContent), unit: "g", label: "fat" },
-  ].filter(cell => cell.value !== "");
-});
+const macroCells = computed(() => getMacroCells(props.recipe.nutrition));
 
 const servings = computed<number>(
   () => props.recipe.recipeServings || props.recipe.recipeYieldQuantity || 1,
@@ -144,14 +128,32 @@ const perLabel = computed(() =>
   yieldNoun.value ? `per ${singular(yieldNoun.value)}` : "per serving",
 );
 
+// Short labels for hosts we import from often; anything else falls back to the
+// capitalized registrable domain ("skinnytaste.com" -> "Skinnytaste").
+const KNOWN_SOURCES: Record<string, string> = {
+  "flexibledietinglifestyle.com": "FDL",
+};
+const SECOND_LEVEL_TLDS = new Set(["co", "com", "net", "org", "gov", "ac", "edu"]);
+
 const sourceLabel = computed(() => {
   const url = props.recipe.orgURL;
   if (!url) {
     return "";
   }
   try {
-    const host = new URL(url).hostname.replace(/^www\./, "");
-    return host || "source";
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+    for (const [domain, label] of Object.entries(KNOWN_SOURCES)) {
+      if (host === domain || host.endsWith(`.${domain}`)) {
+        return label;
+      }
+    }
+    const parts = host.split(".");
+    let i = parts.length - 2;
+    if (i > 0 && parts.length >= 3 && SECOND_LEVEL_TLDS.has(parts[i]!)) {
+      i -= 1;
+    }
+    const label = parts[Math.max(i, 0)] || "";
+    return label ? label.charAt(0).toUpperCase() + label.slice(1) : "source";
   }
   catch {
     return "source";

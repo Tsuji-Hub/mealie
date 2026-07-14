@@ -1,8 +1,7 @@
 <template>
   <div>
-    <RecipePageInfoCard
+    <RecipePageHero
       :recipe="recipe"
-      :recipe-scale="recipeScale"
       :landscape="landscape"
     />
     <v-divider />
@@ -29,7 +28,7 @@
 <script setup lang="ts">
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useRecipePermissions } from "~/composables/recipes";
-import RecipePageInfoCard from "~/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageInfoCard.vue";
+import RecipePageHero from "~/components/Domain/Recipe/RecipePage/RecipePageParts/RecipePageHero.vue";
 import RecipeActionMenu from "~/components/Domain/Recipe/RecipeActionMenu.vue";
 import { useStaticRoutes, useUserApi } from "~/composables/api";
 import type { HouseholdSummary } from "~/lib/api/types/household";

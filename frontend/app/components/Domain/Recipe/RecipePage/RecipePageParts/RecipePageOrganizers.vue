@@ -1,8 +1,8 @@
 <template>
   <div>
-    <!-- Recipe Categories -->
+    <!-- Recipe Categories (view-mode chips live in the page hero; these are edit selectors) -->
     <v-card
-      v-if="recipe.recipeCategory.length > 0 || isEditForm"
+      v-if="isEditForm"
       :class="{ 'mt-10': !isEditForm }"
     >
       <v-card-title class="py-2">
@@ -25,9 +25,9 @@
       </v-card-text>
     </v-card>
 
-    <!-- Recipe Tags -->
+    <!-- Recipe Tags (view-mode chips live in the page hero; these are edit selectors) -->
     <v-card
-      v-if="recipe.tags.length > 0 || isEditForm"
+      v-if="isEditForm"
       class="mt-4"
     >
       <v-card-title class="py-2">
