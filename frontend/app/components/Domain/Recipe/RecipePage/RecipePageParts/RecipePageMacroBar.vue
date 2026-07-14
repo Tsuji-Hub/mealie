@@ -265,7 +265,7 @@ async function onShare() {
 
 .fork-btn--primary.v-btn {
   background: rgb(var(--v-theme-primary));
-  color: #fff;
+  color: rgb(var(--v-theme-on-primary));
 }
 
 @media (max-width: 700px) {

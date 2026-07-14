@@ -1,9 +1,6 @@
 <template>
   <div>
-    <RecipePageHero
-      :recipe="recipe"
-      :landscape="landscape"
-    />
+    <RecipePageHero :recipe="recipe" />
     <v-divider />
     <RecipeActionMenu
       :recipe="recipe"

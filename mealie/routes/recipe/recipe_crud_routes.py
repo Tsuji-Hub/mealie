@@ -37,8 +37,8 @@ from mealie.schema.recipe import Recipe, ScrapeRecipe, ScrapeRecipeData
 from mealie.schema.recipe.recipe import (
     CreateRecipe,
     CreateRecipeByUrlBulk,
+    RecipeCardSummary,
     RecipeLastMade,
-    RecipeSummary,
 )
 from mealie.schema.recipe.recipe_asset import RecipeAsset
 from mealie.schema.recipe.recipe_scraper import ScrapeRecipeTest
@@ -337,7 +337,7 @@ class RecipeController(BaseRecipeController):
     # ==================================================================================================================
     # CRUD Operations
 
-    @router.get("", response_model=PaginationBase[RecipeSummary])
+    @router.get("", response_model=PaginationBase[RecipeCardSummary])
     def get_all(
         self,
         request: Request,

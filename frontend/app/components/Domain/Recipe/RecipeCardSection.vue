@@ -119,9 +119,7 @@
           >
             <RecipeCard
               :name="recipe.name!"
-              :description="recipe.description!"
               :slug="recipe.slug!"
-              :rating="recipe.rating!"
               :image="recipe.image!"
               :tags="recipe.tags!"
               :categories="recipe.recipeCategory!"
@@ -222,7 +220,8 @@ const auth = useMealieAuth();
 const { $globals } = useNuxtApp();
 const { isOwnGroup } = useLoggedInState();
 // Fork: default every width to the image-forward tile grid (2-up on phones), not the
-// 1-up horizontal list. Users can still opt into the dense list via the toggle.
+// 1-up horizontal list. The dense list is opt-in via the view toggle, which lives in
+// the toolbar overflow menu shown on md-and-up (it is hidden on phones).
 const useMobileCards = computed(() => {
   return preferences.value.useMobileCards;
 });

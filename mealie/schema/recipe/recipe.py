@@ -146,9 +146,6 @@ class RecipeSummary(MealieModel):
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = UpdatedAtField(None)
     last_made: datetime.datetime | None = None
-    # Fork: expose nutrition on the summary so recipe-list cards can show calories.
-    # Eager-loaded in loader_options below (scalar relationship) to avoid an N+1.
-    nutrition: Nutrition | None = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("recipe_servings", "recipe_yield_quantity", mode="before")
@@ -175,8 +172,24 @@ class RecipeSummary(MealieModel):
             joinedload(RecipeModel.tags),
             joinedload(RecipeModel.tools),
             joinedload(RecipeModel.user).load_only(User.household_id),
-            selectinload(RecipeModel.nutrition),
         ]
+
+
+class RecipeCardSummary(RecipeSummary):
+    """Fork: recipe-list summary that also carries nutrition, for the card grid.
+
+    Kept separate from RecipeSummary (rather than adding nutrition to the base) so
+    the many schemas that nest a RecipeSummary — meal plans, shopping lists, tag and
+    tool detail — don't eager-load nutrition they never display, and their own
+    loaders stay untouched. Mirrors how Recipe extends RecipeSummary with more fields.
+    """
+
+    nutrition: Nutrition | None = None
+
+    @classmethod
+    def loader_options(cls) -> list[LoaderOption]:
+        # nutrition is a scalar relationship, so selectinload is one batched query.
+        return [*RecipeSummary.loader_options(), selectinload(RecipeModel.nutrition)]
 
 
 class RecipePagination(PaginationBase):

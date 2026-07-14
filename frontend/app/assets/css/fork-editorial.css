@@ -88,6 +88,10 @@
 .fork-hero__flat {
   padding-top: 6px;
 }
+/* No-photo hero: the macro card doesn't float, so give it breathing room from the title. */
+.fork-hero__flat + .fork-macros {
+  margin-top: 20px;
+}
 
 .fork-hero-title {
   font-family: var(--fork-font-display);
@@ -155,6 +159,10 @@
 }
 .v-btn {
   box-shadow: none !important;
+}
+/* The VBtn rounded:lg default (theme.ts) squares off icon buttons; keep them circular. */
+.v-btn--icon {
+  border-radius: 50% !important;
 }
 
 /* ============================================================

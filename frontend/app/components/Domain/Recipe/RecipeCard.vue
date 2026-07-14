@@ -89,9 +89,6 @@ import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
 interface Props {
   name: string;
   slug: string;
-  description?: string | null;
-  rating?: number;
-  ratingColor?: string;
   image?: string;
   tags?: RecipeTag[] | null;
   categories?: RecipeCategory[] | null;
@@ -103,9 +100,6 @@ interface Props {
   yieldText?: string | null;
 }
 const props = withDefaults(defineProps<Props>(), {
-  description: null,
-  rating: 0,
-  ratingColor: "secondary",
   image: "abc123",
   tags: () => [],
   categories: () => [],
@@ -243,11 +237,17 @@ const statLine = computed(() => timeLabel.value || servingsLabel.value);
   margin-top: 9px;
   min-height: 26px;
 }
+/* Footer action buttons: transparent, not the theme's filled-secondary default
+   (which rendered as a low-contrast tan square over the card surface). */
+.fork-tile__meta :deep(.v-btn) {
+  background-color: transparent !important;
+}
 .fork-tile__stats {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
+  overflow: hidden;
   color: var(--fork-text-3);
   font-size: 12.5px;
 }
@@ -256,5 +256,19 @@ const statLine = computed(() => timeLabel.value || servingsLabel.value);
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fork-tile.v-card,
+  .fork-tile__media :deep(.v-img__img) {
+    transition: none !important;
+  }
+  .fork-tile.v-card:hover,
+  .fork-tile:hover .fork-tile__media :deep(.v-img__img) {
+    transform: none !important;
+  }
 }
 </style>

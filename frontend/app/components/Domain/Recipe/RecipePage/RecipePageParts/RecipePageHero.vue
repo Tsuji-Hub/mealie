@@ -5,6 +5,7 @@
       <v-img
         :key="imageKey"
         :src="recipeImageUrl"
+        :alt="recipe.name || ''"
         :height="heroHeight"
         cover
         class="fork-hero__img d-print-none"
@@ -62,11 +63,7 @@ import { usePageState } from "~/composables/recipe-page/shared-state";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe } from "~/lib/api/types/recipe";
 
-interface Props {
-  recipe: NoUndefinedField<Recipe>;
-  landscape: boolean;
-}
-const props = defineProps<Props>();
+const props = defineProps<{ recipe: NoUndefinedField<Recipe> }>();
 
 const i18n = useI18n();
 const display = useDisplay();
