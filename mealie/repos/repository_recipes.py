@@ -22,7 +22,7 @@ from mealie.db.models.users.user_to_recipe import UserToRecipe
 from mealie.db.models.users.users import User
 from mealie.schema.cookbook.cookbook import ReadCookBook
 from mealie.schema.recipe import Recipe
-from mealie.schema.recipe.recipe import RecipeCardSummary, RecipePagination, RecipeSummary, create_recipe_slug
+from mealie.schema.recipe.recipe import RecipePagination, RecipeSummary, create_recipe_slug
 from mealie.schema.recipe.recipe_ingredient import IngredientFood
 from mealie.schema.recipe.recipe_suggestion import RecipeSuggestionQuery, RecipeSuggestionResponseItem
 from mealie.schema.recipe.recipe_tool import RecipeToolOut
@@ -274,8 +274,8 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
         q, count, total_pages = self.add_pagination_to_query(q, pagination_result)
 
         # Apply options late, so they do not get used for counting.
-        # Fork: RecipeCardSummary eager-loads nutrition so recipe-list cards show calories.
-        q = q.options(*RecipeCardSummary.loader_options())
+        # Fork: RecipeSummary eager-loads nutrition so recipe-list cards show calories.
+        q = q.options(*RecipeSummary.loader_options())
         try:
             self.logger.debug(f"Recipe Pagination Query: {pagination_result}")
             data = self.session.execute(q).scalars().unique().all()
@@ -284,7 +284,7 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
             self.session.rollback()
             raise e
 
-        items = [RecipeCardSummary.model_validate(item) for item in data]
+        items = [RecipeSummary.model_validate(item) for item in data]
         return RecipePagination(
             page=pagination_result.page,
             per_page=pagination_result.per_page,

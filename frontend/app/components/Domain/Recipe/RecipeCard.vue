@@ -18,46 +18,54 @@
         :image-version="image"
       >
         <div class="fork-tile__overlay">
-          <!-- Logged in: pill opens a quick-categorize menu (files into cookbooks). -->
-          <RecipeCardCategoryMenu
-            v-if="isOwnGroup"
-            v-model="localCategories"
-            :recipe-id="recipeId"
-          >
-            <template #activator="{ props: menuProps }">
-              <button
-                type="button"
-                class="fork-tile__tag fork-tile__tag--btn"
-                :style="primaryCategory ? { '--tc': tagHue(primaryCategory.name) } : undefined"
-                v-bind="menuProps"
-                @click.stop.prevent
-              >
-                <span v-if="primaryCategory" class="fork-tile__dot" />
-                <v-icon v-else size="13" class="fork-tile__plus">
-                  {{ $globals.icons.createAlt }}
-                </v-icon>
-                <span class="fork-tile__ellip">
-                  {{ primaryCategory ? primaryCategory.name : "Category" }}
-                </span>
-                <v-icon size="12" class="fork-tile__caret">
-                  {{ $globals.icons.chevronDown }}
-                </v-icon>
-              </button>
-            </template>
-          </RecipeCardCategoryMenu>
+          <!-- Top row: category pill (shrinks) on the left, calories on the right.
+               Flex keeps them from overlapping on narrow cards. -->
+          <div class="fork-tile__top">
+            <!-- Logged in: pill opens a quick-categorize menu (files into cookbooks). -->
+            <RecipeCardCategoryMenu
+              v-if="isOwnGroup"
+              v-model="localCategories"
+              :recipe-id="recipeId"
+            >
+              <template #activator="{ props: menuProps }">
+                <button
+                  type="button"
+                  class="fork-tile__tag fork-tile__tag--btn"
+                  :style="primaryCategory ? { '--tc': tagHue(primaryCategory.name) } : undefined"
+                  v-bind="menuProps"
+                  @click.stop.prevent
+                >
+                  <span v-if="primaryCategory" class="fork-tile__dot" />
+                  <v-icon v-else size="13" class="fork-tile__plus">
+                    {{ $globals.icons.createAlt }}
+                  </v-icon>
+                  <span class="fork-tile__ellip">
+                    {{ primaryCategory ? primaryCategory.name : "Category" }}
+                  </span>
+                  <v-icon size="12" class="fork-tile__caret">
+                    {{ $globals.icons.chevronDown }}
+                  </v-icon>
+                </button>
+              </template>
+            </RecipeCardCategoryMenu>
 
-          <!-- Logged out / public: plain read-only pill. -->
-          <span
-            v-else-if="staticTag"
-            class="fork-tile__tag"
-            :style="{ '--tc': tagHue(staticTag) }"
-          >
-            <span class="fork-tile__dot" />
-            <span class="fork-tile__ellip">{{ staticTag }}</span>
-          </span>
+            <!-- Logged out / public: plain read-only pill. -->
+            <span
+              v-else-if="staticTag"
+              class="fork-tile__tag"
+              :style="{ '--tc': tagHue(staticTag) }"
+            >
+              <span class="fork-tile__dot" />
+              <span class="fork-tile__ellip">{{ staticTag }}</span>
+            </span>
 
-          <span v-if="calories" class="fork-tile__kcal">
-            <b>{{ calories }}</b> kcal
+            <span v-if="calories" class="fork-tile__kcal">
+              <b>{{ calories }}</b> kcal
+            </span>
+          </div>
+
+          <span v-if="timeLabel" class="fork-tile__time">
+            <v-icon size="12" class="mr-1">{{ $globals.icons.clockOutline }}</v-icon>{{ timeLabel }}
           </span>
         </div>
       </RecipeCardImage>
@@ -68,11 +76,8 @@
         {{ name }}
       </h3>
       <div class="fork-tile__meta">
-        <span v-if="statLine" class="fork-tile__stats">
-          <span v-if="timeLabel" class="fork-tile__stat">
-            <v-icon size="13">{{ $globals.icons.clockOutline }}</v-icon>{{ timeLabel }}
-          </span>
-          <span v-if="servingsLabel" class="fork-tile__stat">
+        <span v-if="servingsLabel" class="fork-tile__stats">
+          <span class="fork-tile__stat">
             <v-icon size="13">{{ $globals.icons.potSteam }}</v-icon>{{ servingsLabel }}
           </span>
         </span>
@@ -176,7 +181,6 @@ const yieldNoun = computed(() => (props.yieldText || "").replace(/^[\d.\s]+/, ""
 const servingsLabel = computed(() =>
   props.servings ? `${props.servings} ${yieldNoun.value || "servings"}` : "",
 );
-const statLine = computed(() => timeLabel.value || servingsLabel.value);
 </script>
 
 <style scoped>
@@ -211,10 +215,18 @@ const statLine = computed(() => timeLabel.value || servingsLabel.value);
   pointer-events: auto;
 }
 
-.fork-tile__tag,
-.fork-tile__kcal {
+.fork-tile__top {
   position: absolute;
   top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.fork-tile__tag,
+.fork-tile__kcal,
+.fork-tile__time {
   display: inline-flex;
   align-items: center;
   font-size: 12px;
@@ -225,12 +237,12 @@ const statLine = computed(() => timeLabel.value || servingsLabel.value);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.16);
   line-height: 1.2;
-  max-width: calc(50% - 14px);
 }
 .fork-tile__tag {
-  left: 10px;
   gap: 6px;
   font-weight: 600;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .fork-tile__tag--btn {
   font: inherit;
@@ -246,13 +258,38 @@ const statLine = computed(() => timeLabel.value || servingsLabel.value);
   margin-left: 3px;
   opacity: 0.75;
 }
+/* Calories: always pinned to the right of the top row, never shrinks. */
 .fork-tile__kcal {
-  right: 10px;
+  margin-left: auto;
+  flex: 0 0 auto;
   font-weight: 500;
+  white-space: nowrap;
 }
 .fork-tile__kcal b {
   font-weight: 700;
   margin-right: 3px;
+}
+/* Time: its own badge, bottom-right of the photo. */
+.fork-tile__time {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Narrow (2-up phone) cards: shrink the badges so the category name + calories
+   both fit, and drop the caret to save room. */
+@media (max-width: 599px) {
+  .fork-tile__tag,
+  .fork-tile__kcal,
+  .fork-tile__time {
+    font-size: 10.5px;
+    padding: 3px 8px;
+  }
+  .fork-tile__caret {
+    display: none;
+  }
 }
 .fork-tile__dot {
   width: 7px;
