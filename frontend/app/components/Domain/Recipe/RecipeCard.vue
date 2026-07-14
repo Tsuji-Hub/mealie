@@ -18,13 +18,42 @@
         :image-version="image"
       >
         <div class="fork-tile__overlay">
+          <!-- Logged in: pill opens a quick-categorize menu (files into cookbooks). -->
+          <RecipeCardCategoryMenu
+            v-if="isOwnGroup"
+            v-model="localCategories"
+            :recipe-id="recipeId"
+          >
+            <template #activator="{ props: menuProps }">
+              <button
+                type="button"
+                class="fork-tile__tag fork-tile__tag--btn"
+                :style="primaryCategory ? { '--tc': tagHue(primaryCategory.name) } : undefined"
+                v-bind="menuProps"
+                @click.stop.prevent
+              >
+                <span v-if="primaryCategory" class="fork-tile__dot" />
+                <v-icon v-else size="13" class="fork-tile__plus">
+                  {{ $globals.icons.createAlt }}
+                </v-icon>
+                <span class="fork-tile__ellip">
+                  {{ primaryCategory ? primaryCategory.name : "Category" }}
+                </span>
+                <v-icon size="12" class="fork-tile__caret">
+                  {{ $globals.icons.chevronDown }}
+                </v-icon>
+              </button>
+            </template>
+          </RecipeCardCategoryMenu>
+
+          <!-- Logged out / public: plain read-only pill. -->
           <span
-            v-if="primaryTag"
+            v-else-if="staticTag"
             class="fork-tile__tag"
-            :style="{ '--tc': tagHue(primaryTag) }"
+            :style="{ '--tc': tagHue(staticTag) }"
           >
             <span class="fork-tile__dot" />
-            <span class="fork-tile__ellip">{{ primaryTag }}</span>
+            <span class="fork-tile__ellip">{{ staticTag }}</span>
           </span>
 
           <span v-if="calories" class="fork-tile__kcal">
@@ -82,6 +111,7 @@
 import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
+import RecipeCardCategoryMenu from "./RecipeCardCategoryMenu.vue";
 import { tagHue } from "~/composables/recipes/use-tag-color";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
@@ -126,8 +156,18 @@ const recipeRoute = computed<string>(() =>
 );
 const cursor = computed(() => (showRecipeContent.value ? "pointer" : "auto"));
 
-// One identity tag in the corner: prefer a category, fall back to the first tag.
-const primaryTag = computed(
+// Local copy of the recipe's categories so the quick-categorize menu can update the pill
+// optimistically without refetching the whole list; re-syncs if the list refreshes.
+const localCategories = ref<RecipeCategory[]>([...(props.categories || [])]);
+watch(
+  () => props.categories,
+  value => (localCategories.value = [...(value || [])]),
+);
+
+// Interactive pill (logged in) shows the first category, or "+ Category" when none.
+const primaryCategory = computed<RecipeCategory | null>(() => localCategories.value[0] || null);
+// Read-only pill (logged out) keeps the old category-or-tag display.
+const staticTag = computed(
   () => props.categories?.[0]?.name || props.tags?.[0]?.name || "",
 );
 
@@ -191,6 +231,20 @@ const statLine = computed(() => timeLabel.value || servingsLabel.value);
   left: 10px;
   gap: 6px;
   font-weight: 600;
+}
+.fork-tile__tag--btn {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.fork-tile__plus {
+  margin-right: 3px;
+}
+.fork-tile__caret {
+  margin-left: 3px;
+  opacity: 0.75;
 }
 .fork-tile__kcal {
   right: 10px;
