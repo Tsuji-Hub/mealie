@@ -146,6 +146,9 @@ class RecipeSummary(MealieModel):
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = UpdatedAtField(None)
     last_made: datetime.datetime | None = None
+    # Fork: expose nutrition on the summary so recipe-list cards can show calories.
+    # Eager-loaded in loader_options below (scalar relationship) to avoid an N+1.
+    nutrition: Nutrition | None = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("recipe_servings", "recipe_yield_quantity", mode="before")
@@ -172,6 +175,7 @@ class RecipeSummary(MealieModel):
             joinedload(RecipeModel.tags),
             joinedload(RecipeModel.tools),
             joinedload(RecipeModel.user).load_only(User.household_id),
+            selectinload(RecipeModel.nutrition),
         ]
 
 

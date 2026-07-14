@@ -27,9 +27,8 @@
             <span class="fork-tile__ellip">{{ primaryTag }}</span>
           </span>
 
-          <span v-if="metric" class="fork-tile__metric">
-            <v-icon v-if="metricIcon" size="13" class="mr-1">{{ metricIcon }}</v-icon>
-            <span class="fork-tile__ellip">{{ metric }}</span>
+          <span v-if="calories" class="fork-tile__kcal">
+            <b>{{ calories }}</b> kcal
           </span>
         </div>
       </RecipeCardImage>
@@ -40,20 +39,22 @@
         {{ name }}
       </h3>
       <div class="fork-tile__meta">
+        <span v-if="statLine" class="fork-tile__stats">
+          <span v-if="timeLabel" class="fork-tile__stat">
+            <v-icon size="13">{{ $globals.icons.clockOutline }}</v-icon>{{ timeLabel }}
+          </span>
+          <span v-if="servingsLabel" class="fork-tile__stat">
+            <v-icon size="13">{{ $globals.icons.potSteam }}</v-icon>{{ servingsLabel }}
+          </span>
+        </span>
+        <v-spacer />
         <RecipeFavoriteBadge
           v-if="isOwnGroup"
           :recipe-id="recipeId"
           show-always
         />
-        <RecipeCardRating
-          v-if="rating"
-          :model-value="rating"
-          :recipe-id="recipeId"
-        />
-        <v-spacer />
         <RecipeContextMenu
           v-if="isOwnGroup && showRecipeContent"
-          class="fork-tile__menu"
           :slug="slug"
           :menu-icon="$globals.icons.dotsVertical"
           :name="name"
@@ -81,7 +82,6 @@
 import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
-import RecipeCardRating from "./RecipeCardRating.vue";
 import { tagHue } from "~/composables/recipes/use-tag-color";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
@@ -121,7 +121,6 @@ defineEmits<{
   delete: [slug: string];
 }>();
 
-const { $globals } = useNuxtApp();
 const auth = useMealieAuth();
 const { isOwnGroup } = useLoggedInState();
 
@@ -138,30 +137,12 @@ const primaryTag = computed(
   () => props.categories?.[0]?.name || props.tags?.[0]?.name || "",
 );
 
-// One metric badge: calories when available (the point of a macro app), else total
-// time, else servings. Auto-upgrades to kcal the moment the list payload carries it.
+const timeLabel = computed(() => props.totalTime || "");
 const yieldNoun = computed(() => (props.yieldText || "").replace(/^[\d.\s]+/, "").trim());
-const metric = computed(() => {
-  if (props.calories) {
-    return `${props.calories} kcal`;
-  }
-  if (props.totalTime) {
-    return props.totalTime;
-  }
-  if (props.servings) {
-    return `${props.servings} ${yieldNoun.value || "servings"}`;
-  }
-  return "";
-});
-const metricIcon = computed(() => {
-  if (props.calories) {
-    return ""; // "106 kcal" reads clearly without an icon
-  }
-  if (props.totalTime) {
-    return $globals.icons.clockOutline;
-  }
-  return $globals.icons.potSteam;
-});
+const servingsLabel = computed(() =>
+  props.servings ? `${props.servings} ${yieldNoun.value || "servings"}` : "",
+);
+const statLine = computed(() => timeLabel.value || servingsLabel.value);
 </script>
 
 <style scoped>
@@ -180,11 +161,11 @@ const metricIcon = computed(() => {
 .fork-tile__media {
   overflow: hidden;
 }
-.fork-tile:hover .fork-tile__media :deep(.v-img__img) {
-  transform: scale(1.05);
-}
 .fork-tile__media :deep(.v-img__img) {
   transition: transform 0.5s ease;
+}
+.fork-tile:hover .fork-tile__media :deep(.v-img__img) {
+  transform: scale(1.05);
 }
 
 .fork-tile__overlay {
@@ -197,12 +178,12 @@ const metricIcon = computed(() => {
 }
 
 .fork-tile__tag,
-.fork-tile__metric {
+.fork-tile__kcal {
   position: absolute;
+  top: 10px;
   display: inline-flex;
   align-items: center;
   font-size: 12px;
-  font-weight: 600;
   color: #f4efe8;
   padding: 5px 11px;
   border-radius: 999px;
@@ -210,15 +191,27 @@ const metricIcon = computed(() => {
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.16);
   line-height: 1.2;
+  max-width: calc(50% - 14px);
 }
 .fork-tile__tag {
-  top: 10px;
   left: 10px;
   gap: 6px;
-  max-width: calc(100% - 20px);
+  font-weight: 600;
 }
-.fork-tile__metric {
-  max-width: calc(100% - 20px);
+.fork-tile__kcal {
+  right: 10px;
+  font-weight: 500;
+}
+.fork-tile__kcal b {
+  font-weight: 700;
+  margin-right: 3px;
+}
+.fork-tile__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--tc);
+  flex: 0 0 auto;
 }
 .fork-tile__ellip {
   overflow: hidden;
@@ -226,19 +219,9 @@ const metricIcon = computed(() => {
   white-space: nowrap;
   min-width: 0;
 }
-.fork-tile__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--tc);
-}
-.fork-tile__metric {
-  bottom: 10px;
-  left: 10px;
-}
 
 .fork-tile__body {
-  padding: 13px 15px 14px;
+  padding: 13px 15px 12px;
 }
 .fork-tile__title {
   font-family: var(--fork-font-display);
@@ -257,7 +240,21 @@ const metricIcon = computed(() => {
 .fork-tile__meta {
   display: flex;
   align-items: center;
-  margin-top: 8px;
-  min-height: 24px;
+  margin-top: 9px;
+  min-height: 26px;
+}
+.fork-tile__stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--fork-text-3);
+  font-size: 12.5px;
+}
+.fork-tile__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
 }
 </style>
