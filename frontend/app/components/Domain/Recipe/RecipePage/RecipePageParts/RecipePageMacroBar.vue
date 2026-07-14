@@ -1,85 +1,68 @@
 <template>
   <div
     v-if="show"
-    class="mb-4"
+    class="fork-macros"
   >
-    <v-sheet
-      rounded="lg"
-      border
-      class="px-3 py-2"
-    >
-      <!-- Macro row: kcal / protein / carbs / fat, then servings (visually separated) -->
-      <div class="d-flex align-center text-center">
+    <div class="fork-macros__card">
+      <div class="fork-macros__grid">
         <div
           v-for="cell in macroCells"
           :key="cell.key"
-          class="flex-grow-1"
-          style="flex-basis: 0"
+          class="fork-macro"
+          :class="{ 'fork-macro--accent': cell.key === 'calories' }"
         >
-          <div class="macro-value">
-            {{ cell.value }}<span class="macro-unit">{{ cell.unit }}</span>
+          <div class="fork-macro__num">
+            {{ cell.value }}<span class="fork-macro__unit">{{ cell.unit }}</span>
           </div>
-          <div class="text-caption text-medium-emphasis">
+          <div class="fork-macro__lbl">
             {{ cell.label }}
           </div>
         </div>
 
-        <v-divider
-          vertical
-          class="mx-1 align-self-stretch"
-        />
+        <div class="fork-macro__div" />
 
-        <div
-          class="flex-grow-1"
-          style="flex-basis: 0"
-        >
-          <div class="macro-value">
+        <div class="fork-macro fork-macro--accent">
+          <div class="fork-macro__num">
             {{ servings }}
           </div>
-          <div class="text-caption text-medium-emphasis">
+          <div class="fork-macro__lbl">
             {{ servingsLabel }}
           </div>
         </div>
       </div>
+    </div>
 
-      <v-divider class="my-2" />
+    <div class="fork-actions">
+      <v-btn
+        class="fork-btn fork-btn--primary"
+        :prepend-icon="$globals.icons.potSteam"
+        @click="toggleCookMode()"
+      >
+        {{ $t("recipe.cook-mode") }}
+      </v-btn>
+      <v-btn
+        v-if="sourceLabel"
+        class="fork-btn"
+        variant="outlined"
+        :href="recipe.orgURL || undefined"
+        :title="recipe.orgURL || undefined"
+        target="_blank"
+        rel="noopener noreferrer"
+        :prepend-icon="$globals.icons.openInNew"
+      >
+        Open {{ sourceLabel }}
+      </v-btn>
+      <v-btn
+        class="fork-btn"
+        variant="outlined"
+        :prepend-icon="$globals.icons.shareVariant"
+        @click="onShare"
+      >
+        {{ $t("general.share") }}
+      </v-btn>
 
-      <!-- Action row: Open source / Share / Cook, with the per-serving hint on the right -->
-      <div class="d-flex align-center flex-wrap ga-1">
-        <v-btn
-          v-if="sourceLabel"
-          :href="recipe.orgURL || undefined"
-          :title="recipe.orgURL || undefined"
-          target="_blank"
-          rel="noopener noreferrer"
-          variant="tonal"
-          size="small"
-          :prepend-icon="$globals.icons.openInNew"
-        >
-          Open {{ sourceLabel }}
-        </v-btn>
-        <v-btn
-          variant="tonal"
-          size="small"
-          :prepend-icon="$globals.icons.shareVariant"
-          @click="onShare"
-        >
-          {{ $t("general.share") }}
-        </v-btn>
-        <v-btn
-          variant="tonal"
-          size="small"
-          :prepend-icon="$globals.icons.potSteam"
-          @click="toggleCookMode()"
-        >
-          {{ $t("recipe.cook-mode") }}
-        </v-btn>
-
-        <span class="ml-auto text-caption text-medium-emphasis">
-          {{ perLabel }}
-        </span>
-      </div>
-    </v-sheet>
+      <span class="fork-basis">{{ perLabel }}</span>
+    </div>
   </div>
 </template>
 
@@ -198,14 +181,105 @@ async function onShare() {
 </script>
 
 <style lang="scss" scoped>
-.macro-value {
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1.2;
+.fork-macros__card {
+  background: rgb(var(--v-theme-surface));
+  border: 1px solid var(--fork-hair);
+  border-radius: 20px;
+  box-shadow: var(--fork-shadow-sm);
+  padding: 20px 10px;
 }
 
-.macro-unit {
-  font-size: 14px;
-  font-weight: 500;
+.fork-macros__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) auto 1fr;
+  align-items: center;
+}
+
+.fork-macro {
+  text-align: center;
+  padding: 0 6px;
+  min-width: 0;
+}
+
+.fork-macro__num {
+  font-family: var(--fork-font-display);
+  font-weight: 540;
+  font-size: clamp(1.6rem, 3.4vw, 2.35rem);
+  line-height: 1;
+  letter-spacing: -0.01em;
+  font-variation-settings: "opsz" 40;
+  color: rgb(var(--v-theme-on-surface));
+}
+
+.fork-macro--accent .fork-macro__num {
+  color: rgb(var(--v-theme-primary));
+}
+
+.fork-macro__unit {
+  font-family: var(--fork-font-sans);
+  font-size: 0.48em;
+  font-weight: 600;
+  color: var(--fork-text-2);
+  margin-left: 1px;
+}
+
+.fork-macro__lbl {
+  margin-top: 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fork-text-3);
+}
+
+.fork-macro__div {
+  width: 1px;
+  height: 48px;
+  background: var(--fork-hair);
+  justify-self: center;
+}
+
+.fork-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.fork-basis {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--fork-text-3);
+  letter-spacing: 0.02em;
+}
+
+.fork-btn.v-btn {
+  height: 44px;
+  border-radius: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  box-shadow: none;
+}
+
+.fork-btn--primary.v-btn {
+  background: rgb(var(--v-theme-primary));
+  color: #fff;
+}
+
+@media (max-width: 700px) {
+  .fork-macros__grid {
+    grid-template-columns: repeat(4, 1fr);
+    row-gap: 16px;
+  }
+  .fork-macro__div {
+    display: none;
+  }
+  .fork-macro:last-child {
+    grid-column: 1 / -1;
+    padding-top: 14px;
+    border-top: 1px solid var(--fork-hair);
+  }
 }
 </style>

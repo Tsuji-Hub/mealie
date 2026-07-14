@@ -1,13 +1,11 @@
 /*
- * Fork: Editorial theme layer. Everything Vuetify `defaults` cannot express.
- * Discipline rules (do not relax these):
- *   1. Serif (Fraunces) on TITLES ONLY - never body text, buttons, ingredients,
- *      or instructions.
- *   2. Letterspaced caps on TINY METADATA ONLY (macro labels, small chips) -
- *      never buttons, headings, or sentences.
+ * Fork: Editorial theme layer — the design language that Vuetify `defaults` and the
+ * palette in theme.ts cannot express (fonts, tokens, the recipe hero, cards).
+ * Discipline: serif (Fraunces) on TITLES/NUMBERS only; letterspaced caps on TINY
+ * metadata only. Never serif on body/buttons/ingredients; never caps on sentences.
+ * Self-hosted fonts — no Google CDN (public PWA with offline caching).
  */
 
-/* Self-hosted variable fonts. No Google CDN: public PWA with offline caching. */
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/fraunces";
 
@@ -16,9 +14,24 @@
   --fork-font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
 }
 
+/* ---- per-theme fork tokens (Vuetify only exposes palette slots) ---- */
+.v-theme--dark {
+  --fork-text-2: #aa9f90;
+  --fork-text-3: #786e60;
+  --fork-hair: rgba(255, 255, 255, 0.09);
+  --fork-shadow: 0 22px 55px -18px rgba(0, 0, 0, 0.62);
+  --fork-shadow-sm: 0 12px 30px -12px rgba(0, 0, 0, 0.55);
+}
+.v-theme--light {
+  --fork-text-2: #6e6557;
+  --fork-text-3: #9c9182;
+  --fork-hair: rgba(40, 30, 16, 0.12);
+  --fork-shadow: 0 22px 50px -20px rgba(60, 45, 25, 0.28);
+  --fork-shadow-sm: 0 12px 28px -14px rgba(60, 45, 25, 0.2);
+}
+
 /* ============================================================
- * Type: Inter everywhere. Vuetify's text-* utility classes pin
- * their own font-family (Roboto), so they need explicit override.
+ * Type: Inter everywhere (Vuetify text-* utilities pin their own family).
  */
 .v-application,
 .v-application [class^="text-h"],
@@ -28,82 +41,135 @@
 .v-application [class*="text-caption"],
 .v-application [class*="text-overline"],
 .v-application [class*="text-button"] {
-  font-family: var(--fork-font-sans) !important;
+  font-family: var(--fork-font-sans);
 }
 
-/* Serif on titles ONLY: the page/recipe <h1>. Wins over the sans rule above
- * via the [class] attribute bump (0,2,1). */
+/* Serif reserved for page titles. */
 .v-application main h1,
 .v-application main h1[class] {
-  font-family: var(--fork-font-display) !important;
-  font-weight: 540;
-  letter-spacing: -0.01em;
-  font-variation-settings: "opsz" 40;
+  font-family: var(--fork-font-display);
+  font-weight: 560;
+  letter-spacing: -0.015em;
+  font-variation-settings: "opsz" 60;
 }
 
 /* ============================================================
- * Caps micro-labels: tiny metadata only.
+ * Recipe hero
  */
-
-/* Macro bar unit labels (kcal / protein / carbs / fat / servings noun). */
-.macro-value + .text-caption {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.6875rem !important;
+.fork-hero__media {
+  position: relative;
+  border-radius: 26px;
+  overflow: hidden;
+  box-shadow: var(--fork-shadow);
+}
+.fork-hero__img {
+  display: block;
+}
+.fork-hero__scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgb(var(--v-theme-background)) 0%,
+    rgba(var(--v-theme-background), 0.74) 24%,
+    rgba(var(--v-theme-background), 0.3) 46%,
+    rgba(var(--v-theme-background), 0) 64%
+  );
+}
+.fork-hero__overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: clamp(18px, 3vw, 32px);
+  z-index: 2;
+}
+.fork-hero__flat {
+  padding-top: 6px;
 }
 
-/* Small chips are identity metadata (DINNER - FDL), and remain clickable. */
-.v-chip--size-small .v-chip__content {
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  font-weight: 600;
-  font-size: 0.6875rem;
+.fork-hero-title {
+  font-family: var(--fork-font-display);
+  font-weight: 560;
+  font-size: clamp(1.55rem, 4.6vw, 3.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variation-settings: "opsz" 144;
+  color: rgb(var(--v-theme-on-surface));
+  max-width: 18ch;
+}
+.fork-hero__overlay .fork-hero-title {
+  text-shadow: 0 2px 26px rgba(0, 0, 0, 0.34);
 }
 
-/* The servings number is the one coral number in the macro bar. */
-.d-flex.text-center > div:last-child > .macro-value {
-  color: rgb(var(--v-theme-primary));
+/* stat block floats over the photo's lower edge (child combinator beats the
+ * component's own single-class margin) */
+.fork-hero > .fork-hero__stats--float {
+  position: relative;
+  z-index: 3;
+  margin: -46px clamp(8px, 3vw, 30px) 0;
+}
+
+.fork-hero__foot {
+  margin-top: 26px;
+}
+.fork-hero__desc {
+  font-size: 16.5px;
+  line-height: 1.62;
+  color: var(--fork-text-2);
+  max-width: 66ch;
+}
+.fork-hero__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 14px;
+  color: var(--fork-text-3);
+  font-size: 13.5px;
+}
+
+@media (max-width: 600px) {
+  .fork-hero__media {
+    border-radius: 20px;
+  }
+  .fork-hero__overlay {
+    padding: 16px 16px 18px;
+  }
+  .fork-hero > .fork-hero__stats--float {
+    margin: -30px 2px 0;
+  }
 }
 
 /* ============================================================
- * Chrome: calm ink/paper app bar instead of a brand-colored band.
- * AppHeader hardcodes color="primary"; overriding here keeps the
- * component untouched (fork rule: theme + CSS only).
+ * De-materialize: cards flat, floating surfaces keep soft depth.
  */
-header.v-app-bar.bg-primary {
-  background-color: rgb(var(--v-theme-surface)) !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
-  border-bottom: thin solid rgba(var(--v-border-color), var(--v-border-opacity)) !important;
+.v-card {
+  box-shadow: none !important;
 }
-
-/* Search field inside the bar used primary-darken-1; make it a quiet well. */
-header.v-app-bar .bg-primary-darken-1 {
-  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
-  color: rgb(var(--v-theme-on-surface)) !important;
+.v-overlay__content .v-card,
+.v-overlay__content .v-sheet,
+.v-overlay__content .v-list {
+  box-shadow: var(--fork-shadow) !important;
 }
-
-/* Icons/text that assumed a dark brand bar ("white") must follow the surface. */
-header.v-app-bar .text-white {
-  color: rgb(var(--v-theme-on-surface)) !important;
-}
-
-/* ============================================================
- * De-materialize: no button shadows (fills and colors stay, so
- * Save/Delete/Close remain clearly visible - they keep their
- * elevated variant's background, just without the drop shadow).
- */
 .v-btn {
   box-shadow: none !important;
 }
 
-/* Cards go flat even where components pass explicit elevation (recipe grid).
- * Floating surfaces (dialogs, menus) keep a soft shadow for depth. */
-.v-card {
-  box-shadow: none !important;
+/* ============================================================
+ * App bar: calm ink/paper surface instead of a brand-colored band.
+ * AppHeader hardcodes color="primary"; recolor here so the component stays untouched.
+ */
+header.v-app-bar.bg-primary {
+  background-color: rgb(var(--v-theme-surface)) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  border-bottom: thin solid var(--fork-hair) !important;
 }
-
-.v-overlay__content .v-card,
-.v-overlay__content .v-sheet,
-.v-overlay__content .v-list {
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32) !important;
+header.v-app-bar .bg-primary-darken-1 {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
+header.v-app-bar .text-white {
+  color: rgb(var(--v-theme-on-surface)) !important;
 }

@@ -1,45 +1,62 @@
 <template>
-  <div class="pa-4 pb-0">
-    <!-- Landscape (mobile / user preference): image on top, text below -->
-    <template v-if="landscape">
+  <div class="fork-hero">
+    <!-- Photo hero: full-bleed image with the title + tags over a scrim -->
+    <div v-if="hasPhoto" class="fork-hero__media">
       <v-img
-        v-if="!hideImage"
         :key="imageKey"
         :src="recipeImageUrl"
-        :height="$vuetify.display.xs ? 200 : 280"
+        :height="heroHeight"
         cover
-        rounded="lg"
-        class="mb-3 d-print-none"
+        class="fork-hero__img d-print-none"
         @error="hideImage = true"
       />
-      <div>
+      <div class="fork-hero__scrim" />
+      <div class="fork-hero__overlay">
         <RecipePageHeroText :recipe="recipe" />
       </div>
-    </template>
+    </div>
 
-    <!-- Desktop: text left, image right -->
-    <div v-else class="d-flex ga-6">
-      <div class="flex-grow-1 align-self-center">
-        <RecipePageHeroText :recipe="recipe" />
-      </div>
-      <v-img
-        v-if="!hideImage"
-        :key="imageKey"
-        :src="recipeImageUrl"
-        width="100%"
-        max-width="40%"
-        height="280"
-        cover
-        rounded="lg"
-        class="flex-shrink-0 d-print-none"
-        @error="hideImage = true"
+    <!-- Flat hero: no photo (or edit mode) — title + tags on the page -->
+    <div v-else class="fork-hero__flat">
+      <RecipePageHeroText :recipe="recipe" />
+    </div>
+
+    <!-- Signature macro stat block; floats over the photo's lower edge when present -->
+    <RecipePageMacroBar
+      :recipe="recipe"
+      :class="{ 'fork-hero__stats--float': hasPhoto }"
+    />
+
+    <div v-if="recipe.description || timeDisplay || recipe.rating" class="fork-hero__foot">
+      <SafeMarkdown
+        v-if="recipe.description"
+        :source="recipe.description"
+        class="fork-hero__desc"
       />
+      <div v-if="timeDisplay || recipe.rating" class="fork-hero__meta">
+        <span v-if="timeDisplay" class="d-inline-flex align-center" :title="timeTitle">
+          <v-icon size="small" color="primary" class="mr-1">
+            {{ $globals.icons.clockOutline }}
+          </v-icon>
+          {{ timeDisplay }}
+        </span>
+        <RecipeRating
+          v-if="recipe.rating"
+          :key="recipe.slug"
+          small
+          :model-value="recipe.rating"
+          :recipe-id="recipe.id"
+          :slug="recipe.slug"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import RecipePageHeroText from "./RecipePageHeroText.vue";
+import RecipePageMacroBar from "./RecipePageMacroBar.vue";
+import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
 import { useStaticRoutes } from "~/composables/api";
 import { usePageState } from "~/composables/recipe-page/shared-state";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
@@ -51,11 +68,16 @@ interface Props {
 }
 const props = defineProps<Props>();
 
+const i18n = useI18n();
 const display = useDisplay();
 const { recipeImage, recipeSmallImage } = useStaticRoutes();
-const { imageKey } = usePageState(props.recipe.slug);
+const { imageKey, isEditMode } = usePageState(props.recipe.slug);
 
 const hideImage = ref(false);
+
+const hasPhoto = computed(() => !!props.recipe.image && !hideImage.value && !isEditMode.value);
+
+const heroHeight = computed(() => (display.mdAndUp.value ? 420 : display.smAndUp.value ? 340 : 270));
 
 const recipeImageUrl = computed(() => {
   return display.smAndDown.value
@@ -69,4 +91,22 @@ watch(
     hideImage.value = false;
   },
 );
+
+const timeDisplay = computed(
+  () => props.recipe.totalTime || props.recipe.performTime || props.recipe.prepTime || "",
+);
+
+const timeTitle = computed(() => {
+  const parts: string[] = [];
+  if (props.recipe.totalTime) {
+    parts.push(`${i18n.t("recipe.total-time")}: ${props.recipe.totalTime}`);
+  }
+  if (props.recipe.prepTime) {
+    parts.push(`${i18n.t("recipe.prep-time")}: ${props.recipe.prepTime}`);
+  }
+  if (props.recipe.performTime) {
+    parts.push(`${i18n.t("recipe.perform-time")}: ${props.recipe.performTime}`);
+  }
+  return parts.join(" · ");
+});
 </script>

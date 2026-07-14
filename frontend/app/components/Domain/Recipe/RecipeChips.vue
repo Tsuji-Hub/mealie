@@ -9,15 +9,13 @@
     <v-chip
       v-for="category in items.slice(0, limit)"
       :key="category.name"
-      label
-      class="mr-1 mt-1"
-      color="accent"
+      class="fork-tag mr-1 mt-1"
       variant="flat"
       :size="small ? 'small' : 'default'"
-      dark
-
+      :style="{ '--tc': tagHue(category.name) }"
       @click.prevent="() => $emit('item-selected', category, urlPrefix)"
     >
+      <span class="fork-tag__dot" />
       {{ truncateText(category.name) }}
     </v-chip>
   </div>
@@ -26,6 +24,7 @@
 <script setup lang="ts">
 import type { RecipeCategory, RecipeTag, RecipeTool } from "~/lib/api/types/recipe";
 import { truncateText as truncatePlainText } from "~/lib/sanitize/text";
+import { tagHue } from "~/composables/recipes/use-tag-color";
 
 export type UrlPrefixParam = "tags" | "categories" | "tools";
 
@@ -55,4 +54,24 @@ function truncateText(text: string, length = 20, clamp = "...") {
 }
 </script>
 
-<style></style>
+<style scoped>
+/* Fork: tinted pill + colored dot. --tc is the per-tag hue. */
+.fork-tag.v-chip {
+  background: color-mix(in srgb, var(--tc) 16%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--tc) 32%, transparent);
+  color: rgb(var(--v-theme-on-surface));
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.fork-tag.v-chip:hover {
+  background: color-mix(in srgb, var(--tc) 26%, transparent) !important;
+}
+.fork-tag__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--tc);
+  margin-right: 7px;
+  flex: 0 0 auto;
+}
+</style>

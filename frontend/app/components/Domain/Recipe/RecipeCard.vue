@@ -7,9 +7,11 @@
     >
       <v-card
         v-bind="hoverProps"
-        :class="{ 'on-hover': isHovering }"
+        :class="['fork-recipe-card', { 'on-hover': isHovering }]"
         :style="{ cursor }"
-        :elevation="isHovering ? 12 : 2"
+        flat
+        border
+        rounded="xl"
         :to="recipeRoute"
         :min-height="imageHeight + 75"
         @click.self="$emit('click')"
@@ -36,7 +38,7 @@
             </div>
           </v-expand-transition>
         </RecipeCardImage>
-        <v-card-title class="mb-n3 px-4" style="font-size: 1.25rem;">
+        <v-card-title class="fork-card-title mb-n3 px-4">
           {{ name }}
         </v-card-title>
 
@@ -139,6 +141,31 @@ const recipeRoute = computed<string>(() => {
 });
 const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
 </script>
+
+<style scoped>
+.fork-recipe-card.v-card {
+  overflow: hidden;
+  transition:
+    transform 0.22s ease,
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+.fork-recipe-card.v-card:hover {
+  transform: translateY(-5px);
+  box-shadow: var(--fork-shadow-sm) !important;
+  border-color: color-mix(in srgb, rgb(var(--v-theme-primary)) 42%, transparent);
+}
+.fork-card-title {
+  font-family: var(--fork-font-display);
+  font-weight: 530;
+  font-size: 1.2rem;
+  line-height: 1.14;
+  letter-spacing: -0.01em;
+  font-variation-settings: "opsz" 40;
+  white-space: normal;
+  word-break: break-word;
+}
+</style>
 
 <style>
 .v-card--reveal {
