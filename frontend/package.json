@@ -20,6 +20,8 @@
     "*.{ts,js,vue}": "eslint"
   },
   "dependencies": {
+    "@fontsource-variable/fraunces": "^5.2.9",
+    "@fontsource-variable/inter": "^5.2.8",
     "@mdi/js": "^7.4.47",
     "@nuxt/fonts": "^0.11.4",
     "@nuxtjs/i18n": "^9.2.1",

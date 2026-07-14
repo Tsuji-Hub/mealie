@@ -1,0 +1,109 @@
+/*
+ * Fork: Editorial theme layer. Everything Vuetify `defaults` cannot express.
+ * Discipline rules (do not relax these):
+ *   1. Serif (Fraunces) on TITLES ONLY - never body text, buttons, ingredients,
+ *      or instructions.
+ *   2. Letterspaced caps on TINY METADATA ONLY (macro labels, small chips) -
+ *      never buttons, headings, or sentences.
+ */
+
+/* Self-hosted variable fonts. No Google CDN: public PWA with offline caching. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/fraunces";
+
+:root {
+  --fork-font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fork-font-display: "Fraunces Variable", Georgia, "Times New Roman", serif;
+}
+
+/* ============================================================
+ * Type: Inter everywhere. Vuetify's text-* utility classes pin
+ * their own font-family (Roboto), so they need explicit override.
+ */
+.v-application,
+.v-application [class^="text-h"],
+.v-application [class*=" text-h"],
+.v-application [class*="text-subtitle"],
+.v-application [class*="text-body"],
+.v-application [class*="text-caption"],
+.v-application [class*="text-overline"],
+.v-application [class*="text-button"] {
+  font-family: var(--fork-font-sans) !important;
+}
+
+/* Serif on titles ONLY: the page/recipe <h1>. Wins over the sans rule above
+ * via the [class] attribute bump (0,2,1). */
+.v-application main h1,
+.v-application main h1[class] {
+  font-family: var(--fork-font-display) !important;
+  font-weight: 540;
+  letter-spacing: -0.01em;
+  font-variation-settings: "opsz" 40;
+}
+
+/* ============================================================
+ * Caps micro-labels: tiny metadata only.
+ */
+
+/* Macro bar unit labels (kcal / protein / carbs / fat / servings noun). */
+.macro-value + .text-caption {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.6875rem !important;
+}
+
+/* Small chips are identity metadata (DINNER - FDL), and remain clickable. */
+.v-chip--size-small .v-chip__content {
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+  font-size: 0.6875rem;
+}
+
+/* The servings number is the one coral number in the macro bar. */
+.d-flex.text-center > div:last-child > .macro-value {
+  color: rgb(var(--v-theme-primary));
+}
+
+/* ============================================================
+ * Chrome: calm ink/paper app bar instead of a brand-colored band.
+ * AppHeader hardcodes color="primary"; overriding here keeps the
+ * component untouched (fork rule: theme + CSS only).
+ */
+header.v-app-bar.bg-primary {
+  background-color: rgb(var(--v-theme-surface)) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+  border-bottom: thin solid rgba(var(--v-border-color), var(--v-border-opacity)) !important;
+}
+
+/* Search field inside the bar used primary-darken-1; make it a quiet well. */
+header.v-app-bar .bg-primary-darken-1 {
+  background-color: rgba(var(--v-theme-on-surface), 0.06) !important;
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
+
+/* Icons/text that assumed a dark brand bar ("white") must follow the surface. */
+header.v-app-bar .text-white {
+  color: rgb(var(--v-theme-on-surface)) !important;
+}
+
+/* ============================================================
+ * De-materialize: no button shadows (fills and colors stay, so
+ * Save/Delete/Close remain clearly visible - they keep their
+ * elevated variant's background, just without the drop shadow).
+ */
+.v-btn {
+  box-shadow: none !important;
+}
+
+/* Cards go flat even where components pass explicit elevation (recipe grid).
+ * Floating surfaces (dialogs, menus) keep a soft shadow for depth. */
+.v-card {
+  box-shadow: none !important;
+}
+
+.v-overlay__content .v-card,
+.v-overlay__content .v-sheet,
+.v-overlay__content .v-list {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32) !important;
+}
