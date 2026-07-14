@@ -4,6 +4,10 @@
     class="fork-macros"
   >
     <div class="fork-macros__card">
+      <div class="fork-macros__eyebrow">
+        <span>Per serving</span>
+        <span class="fork-macros__eyebrow-total">Makes</span>
+      </div>
       <div class="fork-macros__grid">
         <div
           v-for="cell in macroCells"
@@ -60,8 +64,6 @@
       >
         {{ $t("general.share") }}
       </v-btn>
-
-      <span class="fork-basis">{{ perLabel }}</span>
     </div>
   </div>
 </template>
@@ -97,19 +99,6 @@ const yieldNoun = computed(
 );
 
 const servingsLabel = computed(() => yieldNoun.value || i18n.t("recipe.servings"));
-
-/** Light singularization for the "per X" hint: "slices" -> "slice". */
-function singular(noun: string): string {
-  const lower = noun.toLowerCase();
-  if (noun.length > 3 && lower.endsWith("s") && !lower.endsWith("ss")) {
-    return noun.slice(0, -1);
-  }
-  return noun;
-}
-
-const perLabel = computed(() =>
-  yieldNoun.value ? `per ${singular(yieldNoun.value)}` : "per serving",
-);
 
 // Short labels for hosts we import from often; anything else falls back to the
 // capitalized registrable domain ("skinnytaste.com" -> "Skinnytaste").
@@ -189,6 +178,24 @@ async function onShare() {
   padding: 20px 10px;
 }
 
+/* Makes it unmistakable the big numbers are per serving, not for the whole recipe. */
+.fork-macros__eyebrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+  padding: 0 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--v-theme-primary));
+}
+.fork-macros__eyebrow-total {
+  color: var(--fork-text-3);
+  font-weight: 600;
+}
+
 .fork-macros__grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr) auto 1fr;
@@ -245,13 +252,6 @@ async function onShare() {
   align-items: center;
   gap: 10px;
   margin-top: 18px;
-}
-
-.fork-basis {
-  margin-left: auto;
-  font-size: 12.5px;
-  color: var(--fork-text-3);
-  letter-spacing: 0.02em;
 }
 
 .fork-btn.v-btn {

@@ -11,7 +11,7 @@
       :logged-in="isOwnGroup"
       :open="isEditMode"
       :recipe-id="recipe.id"
-      class="ml-auto mt-n7 pb-4"
+      :class="['ml-auto pb-4', { 'mt-n7': $vuetify.display.mdAndUp }]"
       @close="$emit('close')"
       @json="toggleEditMode()"
       @edit="setMode(PageMode.EDIT)"
