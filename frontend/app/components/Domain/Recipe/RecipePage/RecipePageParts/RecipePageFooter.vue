@@ -9,7 +9,7 @@
         :label="$t('recipe.original-url')"
       />
       <v-btn
-        v-else-if="recipe.orgURL && !isCookMode"
+        v-else-if="recipe.orgURL && !isCookMode && !recipe.settings.showNutrition"
         :hover="false"
         :ripple="false"
         variant="flat"

@@ -60,6 +60,7 @@
           <div>
             <RecipePageScale v-model="scale" :recipe="recipe" />
           </div>
+          <RecipePageMacroBar v-if="!isEditForm" :recipe="recipe" />
 
           <!--
             This section contains the 2 column layout for the recipe steps and other content.
@@ -200,6 +201,7 @@ import RecipePageHeader from "./RecipePageParts/RecipePageHeader.vue";
 import RecipePageIngredientEditor from "./RecipePageParts/RecipePageIngredientEditor.vue";
 import RecipePageIngredientToolsView from "./RecipePageParts/RecipePageIngredientToolsView.vue";
 import RecipePageInstructions from "./RecipePageParts/RecipePageInstructions.vue";
+import RecipePageMacroBar from "./RecipePageParts/RecipePageMacroBar.vue";
 import RecipePageOrganizers from "./RecipePageParts/RecipePageOrganizers.vue";
 import RecipePageParseDialog from "./RecipePageParts/RecipePageParseDialog.vue";
 import RecipePageScale from "./RecipePageParts/RecipePageScale.vue";
