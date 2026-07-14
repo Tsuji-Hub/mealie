@@ -111,9 +111,10 @@
           <v-col
             v-for="recipe in recipes"
             :key="recipe.id!"
+            cols="6"
             :sm="6"
-            :md="6"
-            :lg="4"
+            :md="4"
+            :lg="3"
             :xl="3"
           >
             <RecipeCard
@@ -123,7 +124,12 @@
               :rating="recipe.rating!"
               :image="recipe.image!"
               :tags="recipe.tags!"
+              :categories="recipe.recipeCategory!"
               :recipe-id="recipe.id!"
+              :calories="recipe.nutrition?.calories"
+              :total-time="recipe.totalTime"
+              :servings="recipe.recipeServings"
+              :yield-text="recipe.recipeYield"
             />
           </v-col>
         </v-row>
@@ -201,7 +207,6 @@ const emit = defineEmits<{
   appendRecipes: [recipes: Recipe[]];
 }>();
 
-const display = useDisplay();
 const preferences = useUserSortPreferences();
 
 const EVENTS = {
@@ -216,8 +221,10 @@ const EVENTS = {
 const auth = useMealieAuth();
 const { $globals } = useNuxtApp();
 const { isOwnGroup } = useLoggedInState();
+// Fork: default every width to the image-forward tile grid (2-up on phones), not the
+// 1-up horizontal list. Users can still opt into the dense list via the toggle.
 const useMobileCards = computed(() => {
-  return display.smAndDown.value || preferences.value.useMobileCards;
+  return preferences.value.useMobileCards;
 });
 
 const displayTitleIcon = computed(() => {
