@@ -1,5 +1,13 @@
 name: Docker Nightly Production
 
+# FORK NOTES (Tsuji-Hub/mealie)
+# Upstream hard-gates the publish job with `if: github.repository == 'mealie-recipes/mealie'`,
+# which means on a fork it is SKIPPED - the run goes green and no image is ever built.
+# That gate is repointed at this fork below. Discord notify is removed (it used
+# upstream's DISCORD_NIGHTLY_WEBHOOK secret, which we don't have).
+#
+# Result: any push to mealie-next builds and pushes ghcr.io/tsuji-hub/mealie:nightly.
+
 on:
   push:
     branches:
@@ -10,6 +18,8 @@ on:
       # I'm not excluding .github as changes in there might be to workflows etc
       - '.vscode/**'
       - 'docs/**'
+  # lets us kick a build by hand from the Actions tab without an empty commit
+  workflow_dispatch:
 
 concurrency:
   group: nightly-${{ github.ref }}
@@ -34,13 +44,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-      # The id-token write permission is needed to connect to Depot.dev
-      # as part of the partial-builder.yml action. It needs to be declared
-      # in the parent action, as noted here:
-      # https://github.com/orgs/community/discussions/76409#discussioncomment-8131390
-      id-token: write
     name: Build Tagged Release
-    if: github.repository == 'mealie-recipes/mealie'
+    # FORK: was 'mealie-recipes/mealie' - on a fork that silently skipped the build.
+    if: github.repository == 'Tsuji-Hub/mealie'
     uses: ./.github/workflows/publish.yml
     needs:
       - frontend-tests
@@ -48,20 +54,3 @@ jobs:
       - build-package
     with:
       tag: nightly
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-
-  notify-discord:
-    name: Notify Discord
-    if: github.repository == 'mealie-recipes/mealie'
-    needs:
-      - publish
-    runs-on: ubuntu-latest
-    steps:
-      - name: Discord notification
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_NIGHTLY_WEBHOOK }}
-        uses: Ilshidur/action-discord@0.3.2
-        with:
-          args: "🚀  New builds of ghcr.io/mealie-recipes/mealie:nightly"
