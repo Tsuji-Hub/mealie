@@ -128,4 +128,4 @@ Both are generic and worth a PR upstream, not fork-carry.
 
 *(one paragraph max per change — keep this file a working doc, not an archive)*
 
-- **2026-07-12 — fork bootstrapped.** Cloned, `upstream` remote wired, CI rewritten to actually build on a fork (repo gate, Depot, Docker Hub, GHCR lowercase). No app code changed yet.
+- **2026-07-12 — fork bootstrapped, and the whole loop is closed.** Cloned, `upstream` wired, CI rewritten to actually build on a fork (repo gate, Depot, Docker Hub, GHCR lowercase). First build green in 27 min; CT 100 now runs `ghcr.io/tsuji-hub/mealie:nightly` (sha `7d4008c23b07`, amd64). Caddy vhost `recipes.justicemedia.duckdns.org` live with valid TLS, and **Gate A passes over the public internet on our own build** — 6/6 ingredients + nutrition in the server-rendered JSON-LD. No app code changed yet.
