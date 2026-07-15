@@ -4,9 +4,15 @@
     class="fork-macros"
   >
     <div class="fork-macros__card">
-      <div class="fork-macros__eyebrow">
-        <span>Per serving</span>
-        <span class="fork-macros__eyebrow-total">Makes</span>
+      <!-- Name the single unit explicitly. "Per serving" was too abstract, and a big
+           servings number sitting in the same row as the macros read as a fifth stat. -->
+      <div class="fork-macros__head">
+        <div class="fork-macros__title">
+          Macros for 1 {{ unitLabel }}
+        </div>
+        <div v-if="servings > 1" class="fork-macros__sub">
+          Makes {{ servings }} {{ servingsLabel }}
+        </div>
       </div>
       <div class="fork-macros__grid">
         <div
@@ -20,17 +26,6 @@
           </div>
           <div class="fork-macro__lbl">
             {{ cell.label }}
-          </div>
-        </div>
-
-        <div class="fork-macro__div" />
-
-        <div class="fork-macro fork-macro--accent">
-          <div class="fork-macro__num">
-            {{ servings }}
-          </div>
-          <div class="fork-macro__lbl">
-            {{ servingsLabel }}
           </div>
         </div>
       </div>
@@ -99,6 +94,41 @@ const yieldNoun = computed(
 );
 
 const servingsLabel = computed(() => yieldNoun.value || i18n.t("recipe.servings"));
+
+function singularWord(word: string): string {
+  const lower = word.toLowerCase();
+  if (lower.length > 3 && lower.endsWith("ies")) {
+    return `${word.slice(0, -3)}y`;
+  }
+  if (lower.length > 4 && /(?:sses|shes|ches|xes)$/.test(lower)) {
+    return word.slice(0, -2);
+  }
+  if (lower.length > 2 && lower.endsWith("s") && !lower.endsWith("ss") && !lower.endsWith("us")) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+// The head noun of a yield phrase sits before any preposition: "Sausages in Blanket" ->
+// "Sausage in Blanket". Without a preposition it's the last word: "Pizza Slices" ->
+// "Pizza Slice".
+const PREPOSITIONS = new Set(["in", "on", "of", "with", "from", "per", "for"]);
+
+function singularPhrase(phrase: string): string {
+  const words = phrase.trim().split(/\s+/);
+  if (!words.length) {
+    return phrase;
+  }
+  const prepAt = words.findIndex(w => PREPOSITIONS.has(w.toLowerCase()));
+  const head = prepAt > 0 ? prepAt - 1 : words.length - 1;
+  words[head] = singularWord(words[head]!);
+  return words.join(" ");
+}
+
+/** The name of ONE serving: "Sausage in Blanket", "Pizza Slice", else "serving". */
+const unitLabel = computed(() =>
+  yieldNoun.value ? singularPhrase(yieldNoun.value) : "serving",
+);
 
 // Short labels for hosts we import from often; anything else falls back to the
 // capitalized registrable domain ("skinnytaste.com" -> "Skinnytaste").
@@ -182,27 +212,26 @@ async function onShare() {
   padding: 20px 10px;
 }
 
-/* Makes it unmistakable the big numbers are per serving, not for the whole recipe. */
-.fork-macros__eyebrow {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 14px;
-  padding: 0 8px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: rgb(var(--v-theme-primary));
+/* Names the single unit outright, so the numbers can't read as the whole batch. */
+.fork-macros__head {
+  text-align: center;
+  margin-bottom: 18px;
 }
-.fork-macros__eyebrow-total {
-  color: var(--fork-text-3);
+.fork-macros__title {
+  font-size: 13.5px;
   font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgb(var(--v-theme-on-surface));
+}
+.fork-macros__sub {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--fork-text-3);
 }
 
 .fork-macros__grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr) auto 1fr;
+  grid-template-columns: repeat(4, 1fr);
   align-items: center;
 }
 
@@ -243,13 +272,6 @@ async function onShare() {
   color: var(--fork-text-3);
 }
 
-.fork-macro__div {
-  width: 1px;
-  height: 48px;
-  background: var(--fork-hair);
-  justify-self: center;
-}
-
 .fork-actions {
   display: flex;
   flex-wrap: wrap;
@@ -274,16 +296,7 @@ async function onShare() {
 
 @media (max-width: 700px) {
   .fork-macros__grid {
-    grid-template-columns: repeat(4, 1fr);
     row-gap: 16px;
-  }
-  .fork-macro__div {
-    display: none;
-  }
-  .fork-macro:last-child {
-    grid-column: 1 / -1;
-    padding-top: 14px;
-    border-top: 1px solid var(--fork-hair);
   }
 }
 </style>
