@@ -128,6 +128,7 @@
               :total-time="recipe.totalTime"
               :servings="recipe.recipeServings"
               :yield-text="recipe.recipeYield"
+              @category-removed="(slug, cat) => $emit('categoryRemoved', slug, cat)"
             />
           </v-col>
         </v-row>
@@ -174,7 +175,7 @@ import RecipeCard from "./RecipeCard.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
-import type { Recipe } from "~/lib/api/types/recipe";
+import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 import { useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
 
@@ -203,6 +204,8 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   replaceRecipes: [recipes: Recipe[]];
   appendRecipes: [recipes: Recipe[]];
+  /** Relayed from a card's cookbook menu. The list owner decides if the card still belongs. */
+  categoryRemoved: [slug: string, category: RecipeCategory];
 }>();
 
 const preferences = useUserSortPreferences();

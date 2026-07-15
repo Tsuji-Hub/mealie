@@ -26,6 +26,7 @@
               v-if="isOwnGroup"
               v-model="localCategories"
               :recipe-id="recipeId"
+              @category-removed="cat => $emit('categoryRemoved', slug, cat)"
             >
               <template #activator="{ props: menuProps }">
                 <button
@@ -148,6 +149,8 @@ const props = withDefaults(defineProps<Props>(), {
 defineEmits<{
   click: [];
   delete: [slug: string];
+  /** Unfiled from a category — NOT a deletion. The list owner decides if it still belongs. */
+  categoryRemoved: [slug: string, category: RecipeCategory];
 }>();
 
 const auth = useMealieAuth();

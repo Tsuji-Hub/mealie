@@ -51,17 +51,25 @@
 
 <script setup lang="ts">
 import { useCategoryStore } from "~/composables/store";
+import { useCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
 import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 
 const props = defineProps<{ recipeId: string }>();
 
+// Deliberately NOT the `delete` emit — that means "the recipe was destroyed". Unfiling
+// destroys nothing (the recipe still exists, still in its other cookbooks). Reusing delete
+// would work by accident today and invite a real deletion if cleanup ever hangs off it.
+// Emitted only AFTER a successful PATCH, so there is nothing to undo on failure.
+const emit = defineEmits<{ "category-removed": [category: RecipeCategory] }>();
+
 // The recipe's current categories; two-way bound so the card's pill updates optimistically.
 const model = defineModel<RecipeCategory[]>({ required: true });
 
 const api = useUserApi();
 const { store: allCategories } = useCategoryStore();
+const { actions: cookbookActions } = useCookbookStore();
 
 function isChecked(cat: RecipeCategory): boolean {
   return model.value.some(c => c.id === cat.id);
@@ -69,7 +77,8 @@ function isChecked(cat: RecipeCategory): boolean {
 
 async function toggle(cat: RecipeCategory) {
   const prev = model.value;
-  const next = isChecked(cat)
+  const removing = isChecked(cat);
+  const next = removing
     ? prev.filter(c => c.id !== cat.id)
     : [...prev, cat];
 
@@ -82,6 +91,18 @@ async function toggle(cat: RecipeCategory) {
   if (error) {
     model.value = prev; // revert
     alert.error("Couldn't update categories");
+    return;
+  }
+
+  // Counts are computed server-side at load, so any mutation makes them stale — and a stale
+  // count is worse than a stale card, because the number looks authoritative. Refetch rather
+  // than doing local arithmetic: "which cookbooks does this category feed?" is the filter
+  // question again, and local maths drifts. Toggles are rare; one request each is fine.
+  cookbookActions.refresh();
+
+  // Only removals can scope a card out of the view it's in. The page decides whether it does.
+  if (removing) {
+    emit("category-removed", cat);
   }
 }
 </script>

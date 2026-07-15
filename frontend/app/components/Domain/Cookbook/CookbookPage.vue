@@ -58,6 +58,7 @@
           @replace-recipes="replaceRecipes"
           @append-recipes="appendRecipes"
           @delete="removeRecipe"
+          @category-removed="onCategoryRemoved"
         />
       </v-container>
     </v-container>
@@ -71,6 +72,7 @@ import { useCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useCookbook } from "~/composables/use-group-cookbooks";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
+import type { RecipeCategory } from "~/lib/api/types/recipe";
 import CookbookEditor from "~/components/Domain/Cookbook/CookbookEditor.vue";
 
 const auth = useMealieAuth();
@@ -86,6 +88,57 @@ const { actions } = useCookbookStore();
 const router = useRouter();
 
 const book = getOne(slug);
+
+/**
+ * Is THIS cookbook scoped by the given category? The card can't know this — only the page
+ * holds `book`. The filter is already parsed server-side (`queryFilter.parts`), so we read
+ * it rather than re-implementing the DSL.
+ *
+ * Recognises only the narrow, unambiguous shape: a single bare part on
+ * `recipe_category.name` with IN/=. Anything else — parens, OR, extra clauses, a tag/tool
+ * filter, or a count we couldn't compute — returns false and the card simply stays.
+ * The costs are asymmetric: a stale card is what Ethan has today and a refresh fixes it;
+ * wrongly vanishing one looks like data loss and he'd have no idea why. Bias to doing nothing.
+ */
+function isScopedByCategory(category: RecipeCategory): boolean {
+  const cookbook = book.value;
+  if (!cookbook || cookbook.recipeCount == null) {
+    return false;
+  }
+
+  const parts = cookbook.queryFilter?.parts;
+  if (!parts || parts.length !== 1) {
+    return false;
+  }
+
+  const part = parts[0];
+  if (!part || part.leftParenthesis || part.rightParenthesis || part.logicalOperator) {
+    return false;
+  }
+  // Match on the category NAME: every cookbook filters on recipe_category.name with the name
+  // string, not a UUID. Matching on id finds nothing and the vanish silently never fires.
+  // Compare exactly — names carry emoji, apostrophes, parens and "<".
+  if (part.attributeName !== "recipe_category.name") {
+    return false;
+  }
+
+  const operator = String(part.relationalOperator || "").toUpperCase();
+  if (operator !== "IN" && operator !== "=") {
+    return false;
+  }
+
+  const values = Array.isArray(part.value) ? part.value : part.value == null ? [] : [part.value];
+  return values.includes(category.name);
+}
+
+// Unfiled from a category. If that category is what scopes this view, the recipe no longer
+// belongs here — drop the card. It is NOT deleted: it still exists and keeps its other
+// cookbooks. Fired only after the PATCH succeeded, so there's nothing to undo.
+function onCategoryRemoved(recipeSlug: string, category: RecipeCategory) {
+  if (isScopedByCategory(category)) {
+    removeRecipe(recipeSlug);
+  }
+}
 
 const isOwnHousehold = computed(() => {
   if (!(auth.user.value && book.value?.householdId)) {

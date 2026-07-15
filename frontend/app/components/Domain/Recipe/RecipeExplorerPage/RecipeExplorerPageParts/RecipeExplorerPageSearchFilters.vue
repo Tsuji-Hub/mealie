@@ -1,5 +1,10 @@
 <template>
-  <!-- Category Filter -->
+  <!-- Category filter, labelled "Cookbooks" on the browsing path: every category here is
+       1:1 with a cookbook of the same name, and that is the word Ethan thinks in.
+       Binds the EXISTING cookbook.cookbooks key rather than renaming category.categories —
+       that key is shared with the cookbook editor, meal-plan rules, Data Management and the
+       categories admin page, where a category genuinely is a category. Renaming its value
+       would put "Cookbooks" inside the cookbook editor. -->
   <SearchFilter
     v-if="categories"
     v-model="selectedCategories"
@@ -9,7 +14,7 @@
     <v-icon start>
       {{ $globals.icons.categories }}
     </v-icon>
-    {{ $t("category.categories") }}
+    {{ $t("cookbook.cookbooks") }}
   </SearchFilter>
 
   <!-- Tag Filter -->
