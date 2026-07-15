@@ -1,9 +1,10 @@
 <template>
   <div
-    v-if="show"
+    v-if="showActions"
     class="fork-macros"
+    :class="{ 'fork-macros--no-card': !showMacros }"
   >
-    <div class="fork-macros__card">
+    <div v-if="showMacros" class="fork-macros__card">
       <!-- Name the single unit explicitly. "Per serving" was too abstract, and a big
            servings number sitting in the same row as the macros read as a fifth stat. -->
       <div class="fork-macros__head">
@@ -76,7 +77,7 @@
             :prepend-icon="$globals.icons.tags"
             v-bind="menuProps"
           >
-            Categories
+            Cookbooks
           </v-btn>
         </template>
       </RecipeCardCategoryMenu>
@@ -223,12 +224,14 @@ const sourceLabel = computed(() => {
   }
 });
 
-const show = computed(
-  () =>
-    props.recipe.settings.showNutrition
-    && macroCells.value.length > 0
-    && !isCookMode.value
-    && !isEditMode.value,
+// Two gates, deliberately separate. The action row must survive a recipe with no macros —
+// the ~160 non-FDL imports are simultaneously the most likely to lack nutrition and the most
+// likely to need filing into a cookbook, so gating the whole component on macros would hide
+// Cook Mode / Open FDL / Share / Cookbooks on exactly the recipes that need them.
+// The individual actions are already self-gated (sourceLabel, isOwnGroup).
+const showActions = computed(() => !isCookMode.value && !isEditMode.value);
+const showMacros = computed(
+  () => props.recipe.settings.showNutrition && macroCells.value.length > 0,
 );
 
 // Share directly via the Web Share API against the public recipe URL, bypassing

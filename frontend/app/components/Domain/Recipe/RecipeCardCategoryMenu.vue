@@ -14,7 +14,10 @@
       max-height="320"
       class="fork-cat-menu"
     >
-      <v-list-subheader>Add to category</v-list-subheader>
+      <!-- "cookbook" not "category": every cookbook in this instance is built 1:1 on a
+           category, so they name the same object, and Ethan thinks in cookbooks. UI text
+           only — the component, props, API and model stay `category`. -->
+      <v-list-subheader>Add to cookbook</v-list-subheader>
 
       <template v-if="allCategories.length">
         <v-list-item

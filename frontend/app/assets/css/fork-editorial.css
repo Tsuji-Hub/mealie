@@ -115,6 +115,13 @@
   z-index: 3;
   margin: -46px clamp(8px, 3vw, 30px) 0;
 }
+/* ...but a macro-less recipe renders a bare action row with no card to hug the photo,
+ * so cancel the pull or the buttons collide with the title scrim. The component owns this
+ * knowledge (it sets the modifier); the hero must not learn what nutrition is.
+ * Higher specificity than both float rules, so it also wins inside the mobile media query. */
+.fork-hero > .fork-hero__stats--float.fork-macros--no-card {
+  margin-top: 18px;
+}
 
 .fork-hero__foot {
   margin-top: 26px;
