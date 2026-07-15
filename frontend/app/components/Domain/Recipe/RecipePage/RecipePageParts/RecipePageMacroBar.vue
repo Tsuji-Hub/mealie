@@ -59,24 +59,56 @@
       >
         {{ $t("general.share") }}
       </v-btn>
+
+      <!-- Same quick-categorize control as the grid cards. REUSES RecipeCardCategoryMenu on
+           purpose: its additive read-modify-write is wire-verified ([Dinner] + X ->
+           [Dinner, X]). A second implementation is where a destructive overwrite would
+           creep back in and silently wipe cookbook membership. -->
+      <RecipeCardCategoryMenu
+        v-if="isOwnGroup"
+        v-model="localCategories"
+        :recipe-id="recipe.id"
+      >
+        <template #activator="{ props: menuProps }">
+          <v-btn
+            class="fork-btn"
+            variant="outlined"
+            :prepend-icon="$globals.icons.tags"
+            v-bind="menuProps"
+          >
+            Categories
+          </v-btn>
+        </template>
+      </RecipeCardCategoryMenu>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useClipboard, useShare } from "@vueuse/core";
+import RecipeCardCategoryMenu from "~/components/Domain/Recipe/RecipeCardCategoryMenu.vue";
 import { usePageState } from "~/composables/recipe-page/shared-state";
 import { getMacroCells } from "~/composables/recipes/use-macro-summary";
+import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { alert } from "~/composables/use-toast";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
-import type { Recipe } from "~/lib/api/types/recipe";
+import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 
 const props = defineProps<{ recipe: NoUndefinedField<Recipe> }>();
 
 const i18n = useI18n();
 const route = useRoute();
 const auth = useMealieAuth();
+const { isOwnGroup } = useLoggedInState();
 const { isCookMode, isEditMode, toggleCookMode } = usePageState(props.recipe.slug);
+
+// Local copy so the menu can update optimistically without refetching the recipe;
+// re-syncs if the page reloads the recipe.
+const localCategories = ref<RecipeCategory[]>([...(props.recipe.recipeCategory || [])]);
+watch(
+  () => props.recipe.recipeCategory,
+  value => (localCategories.value = [...(value || [])]),
+);
 
 const groupSlug = computed(
   () => (route.params.groupSlug as string) || auth.user?.value?.groupSlug || "",
