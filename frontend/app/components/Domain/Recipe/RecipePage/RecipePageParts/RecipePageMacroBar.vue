@@ -272,6 +272,12 @@ async function onShare() {
   min-width: 0;
 }
 
+/* Hairline between each macro: on a wide card the numbers otherwise float with nothing
+   tying them together. Reads as one nutrition strip instead of four loose figures. */
+.fork-macro + .fork-macro {
+  border-left: 1px solid var(--fork-hair);
+}
+
 .fork-macro__num {
   font-family: var(--fork-font-display);
   font-weight: 540;
