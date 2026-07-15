@@ -151,7 +151,11 @@ async function onShare() {
 
   if (shareIsSupported.value) {
     try {
-      await share({ title, url, text: title });
+      // Deliberately URL-only (plus a title for the preview) — do NOT add `text`.
+      // iOS maps navigator.share to UIActivityViewController: `url` becomes an NSURL
+      // item and `text` an NSString item. With both present, receiving apps such as
+      // MacroFactor grab the string and their "import from link" field lands empty.
+      await share({ title, url });
     }
     catch {
       // User dismissed the share sheet; nothing to do.
