@@ -39,9 +39,7 @@ class GroupCookbookController(BaseCrudController):
         # Mirrors GET /recipes exactly (group-wide + by_user), so a cookbook's count equals
         # the number of recipes you actually see when you open it. by_user is required:
         # column_aliases (rating, last_made) only exist with a user_id, and rating is per-user.
-        return get_repositories(self.session, group_id=self.group_id, household_id=None).recipes.by_user(
-            self.user.id
-        )
+        return get_repositories(self.session, group_id=self.group_id, household_id=None).recipes.by_user(self.user.id)
 
     def registered_exceptions(self, ex: type[Exception]) -> str:
         registered = {
