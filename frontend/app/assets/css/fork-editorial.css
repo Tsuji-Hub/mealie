@@ -16,8 +16,9 @@
 
 /* ---- per-theme fork tokens (Vuetify only exposes palette slots) ---- */
 .v-theme--dark {
-  --fork-text-2: #aa9f90;
-  --fork-text-3: #786e60;
+  /* neutral greys — see theme.ts: warm/tan tones leaked into components */
+  --fork-text-2: #8e8e96;
+  --fork-text-3: #6e6e76;
   --fork-hair: rgba(255, 255, 255, 0.09);
   --fork-shadow: 0 22px 55px -18px rgba(0, 0, 0, 0.62);
   --fork-shadow-sm: 0 12px 30px -12px rgba(0, 0, 0, 0.55);

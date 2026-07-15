@@ -104,23 +104,26 @@ export default defineNuxtPlugin(async (nuxtApp) => {
             "border-opacity": 1,
           },
         },
+        // Neutral near-black + true coral. Deliberately NOT warmed/browned: the warmth was
+        // leaking into components (the tan #AA9F90 secondary is what produced the
+        // tan-square buttons). Keep these values neutral.
         dark: {
           dark: true,
           colors: {
-            "primary": theme?.darkPrimary ?? "#E86A5C",
-            "accent": theme?.darkAccent ?? "#271F17",
-            "secondary": theme?.darkSecondary ?? "#AA9F90",
+            "primary": theme?.darkPrimary ?? "#E0645A",
+            "accent": theme?.darkAccent ?? "#26262B",
+            "secondary": theme?.darkSecondary ?? "#8E8E96",
             "success": theme?.darkSuccess ?? "#7FB069",
             "info": theme?.darkInfo ?? "#8AA4B8",
             "warning": theme?.darkWarning ?? "#E4A93C",
             "error": theme?.darkError ?? "#E5695C",
-            "background": "#16120E",
-            "surface": "#1E1913",
-            "on-background": "#F4EFE8",
-            "on-surface": "#F4EFE8",
+            "background": "#131316",
+            "surface": "#1A1A1E",
+            "on-background": "#F5F3F0",
+            "on-surface": "#F5F3F0",
           },
           variables: {
-            "border-color": "#2C241B",
+            "border-color": "#26262B",
             "border-opacity": 1,
           },
         },

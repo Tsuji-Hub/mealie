@@ -4,19 +4,12 @@
     class="fork-macros"
   >
     <div class="fork-macros__card">
-      <!-- Name the single unit explicitly. "Per serving" was too abstract, and a big
-           servings number sitting in the same row as the macros read as a fifth stat. -->
-      <div class="fork-macros__head">
-        <div class="fork-macros__title">
-          Macros for 1 {{ unitLabel }}
-        </div>
-        <div v-if="servings > 1" class="fork-macros__sub">
-          Makes {{ servings }} {{ servingsLabel }}
-        </div>
-      </div>
+      <!-- Layout C: self-describing cells, no header. The kcal cell names the unit
+           ("KCAL PER ROLL") and the hairline divider splits what you eat from what the
+           batch makes ("ROLLS MADE"), so the numbers can't read as the whole batch. -->
       <div class="fork-macros__grid">
         <div
-          v-for="cell in macroCells"
+          v-for="cell in cells"
           :key="cell.key"
           class="fork-macro"
           :class="{ 'fork-macro--accent': cell.key === 'calories' }"
@@ -26,6 +19,17 @@
           </div>
           <div class="fork-macro__lbl">
             {{ cell.label }}
+          </div>
+        </div>
+
+        <div class="fork-macro__div" />
+
+        <div class="fork-macro fork-macro--accent">
+          <div class="fork-macro__num">
+            {{ servings }}
+          </div>
+          <div class="fork-macro__lbl">
+            {{ madeLabel }}
           </div>
         </div>
       </div>
@@ -93,11 +97,29 @@ const yieldNoun = computed(
   () => (props.recipe.recipeYield || "").replace(/^[\d.\s]+/, "").trim(),
 );
 
-const servingsLabel = computed(() => yieldNoun.value || i18n.t("recipe.servings"));
+// Words whose singular already ends in -ie, so the plural is just +s. No rule can tell
+// these from the y->ies family (candies->candy vs cookies->cookie share an ending), so
+// they need an explicit set. Checked BEFORE the ies->y rule.
+// Anything this list misses can be corrected per-recipe via extras.servingUnit.
+const IE_SINGULARS = new Set([
+  "cookie",
+  "brownie",
+  "blondie",
+  "smoothie",
+  "pie",
+  "veggie",
+  "hoagie",
+  "pierogie",
+  "sammie",
+]);
 
 function singularWord(word: string): string {
   const lower = word.toLowerCase();
   if (lower.length > 3 && lower.endsWith("ies")) {
+    // "cookies" -> "cookie" when the singular is a known -ie word, else "candies" -> "candy".
+    if (IE_SINGULARS.has(lower.slice(0, -1))) {
+      return word.slice(0, -1);
+    }
     return `${word.slice(0, -3)}y`;
   }
   if (lower.length > 4 && /(?:sses|shes|ches|xes)$/.test(lower)) {
@@ -125,9 +147,29 @@ function singularPhrase(phrase: string): string {
   return words.join(" ");
 }
 
+// Manual escape hatch for anything the guesser gets wrong (or any unit we've never seen).
+// Set `servingUnit` in the recipe's API Extras (edit mode -> Advanced) to the singular
+// noun, e.g. "Cookie", and it wins over auto-detection. No code change needed.
+const unitOverride = computed(() => {
+  const raw = (props.recipe.extras || {}).servingUnit;
+  return typeof raw === "string" ? raw.trim() : "";
+});
+
 /** The name of ONE serving: "Sausage in Blanket", "Pizza Slice", else "serving". */
-const unitLabel = computed(() =>
-  yieldNoun.value ? singularPhrase(yieldNoun.value) : "serving",
+const unitLabel = computed(
+  () => unitOverride.value || (yieldNoun.value ? singularPhrase(yieldNoun.value) : "serving"),
+);
+
+// Layout C: only the kcal cell names the unit; the divider + "X made" carry the rest.
+const cells = computed(() =>
+  macroCells.value.map(cell =>
+    cell.key === "calories" ? { ...cell, label: `kcal per ${unitLabel.value}` } : cell,
+  ),
+);
+
+/** "Rolls made" / "Sausages in Blanket made", else a plain "Servings". */
+const madeLabel = computed(() =>
+  yieldNoun.value ? `${yieldNoun.value} made` : i18n.t("recipe.servings"),
 );
 
 // Short labels for hosts we import from often; anything else falls back to the
@@ -212,27 +254,11 @@ async function onShare() {
   padding: 20px 10px;
 }
 
-/* Names the single unit outright, so the numbers can't read as the whole batch. */
-.fork-macros__head {
-  text-align: center;
-  margin-bottom: 18px;
-}
-.fork-macros__title {
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: rgb(var(--v-theme-on-surface));
-}
-.fork-macros__sub {
-  margin-top: 3px;
-  font-size: 12px;
-  color: var(--fork-text-3);
-}
-
 .fork-macros__grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  align-items: center;
+  grid-template-columns: repeat(4, 1fr) auto 1fr;
+  /* start, not center: unit-naming labels wrap, and the numbers must stay on one line */
+  align-items: start;
 }
 
 .fork-macro {
@@ -272,6 +298,14 @@ async function onShare() {
   color: var(--fork-text-3);
 }
 
+.fork-macro__div {
+  width: 1px;
+  height: 48px;
+  background: var(--fork-hair);
+  justify-self: center;
+  align-self: center;
+}
+
 .fork-actions {
   display: flex;
   flex-wrap: wrap;
@@ -296,7 +330,17 @@ async function onShare() {
 
 @media (max-width: 700px) {
   .fork-macros__grid {
+    grid-template-columns: repeat(4, 1fr);
     row-gap: 16px;
+  }
+  .fork-macro__div {
+    display: none;
+  }
+  /* the "X made" cell drops to its own full-width row under the macros */
+  .fork-macro:last-child {
+    grid-column: 1 / -1;
+    padding-top: 14px;
+    border-top: 1px solid var(--fork-hair);
   }
 }
 </style>
