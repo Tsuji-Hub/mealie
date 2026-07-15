@@ -96,13 +96,19 @@ const book = getOne(slug);
  *
  * Recognises only the narrow, unambiguous shape: a single bare part on
  * `recipe_category.name` with IN/=. Anything else — parens, OR, extra clauses, a tag/tool
- * filter, or a count we couldn't compute — returns false and the card simply stays.
+ * filter — returns false and the card simply stays.
  * The costs are asymmetric: a stale card is what Ethan has today and a refresh fixes it;
  * wrongly vanishing one looks like data loss and he'd have no idea why. Bias to doing nothing.
+ *
+ * Do NOT guard on `recipeCount` here. It says nothing about whether this cookbook is scoped
+ * by a category — that is entirely `queryFilter.parts`. It's also only stitched onto the LIST
+ * route; this page loads via getOne, where it is always null, so guarding on it disabled the
+ * whole feature silently (no error, just a vanish that never fired). Every guard in here must
+ * test something that actually bears on the question.
  */
 function isScopedByCategory(category: RecipeCategory): boolean {
   const cookbook = book.value;
-  if (!cookbook || cookbook.recipeCount == null) {
+  if (!cookbook) {
     return false;
   }
 
