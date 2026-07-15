@@ -7,6 +7,8 @@ export interface SideBarLink {
   children?: SideBarLink[];
   childrenStartExpanded?: boolean;
   restricted: boolean;
+  /** Fork: optional live count shown muted at the end of the row (cookbook recipe counts). */
+  count?: number | null;
 }
 
 export type SidebarLinks = Array<SideBarLink>;

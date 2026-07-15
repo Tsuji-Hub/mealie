@@ -33,6 +33,8 @@ export interface ReadCookBook {
   id: string;
   queryFilter?: QueryFilterJSON;
   household?: CookbookHousehold | null;
+  /** Fork: live recipe count computed from the cookbook's filter. null if it couldn't be computed. */
+  recipeCount?: number | null;
 }
 export interface QueryFilterJSON {
   parts?: QueryFilterJSONPart[];

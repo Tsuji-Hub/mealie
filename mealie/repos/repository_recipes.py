@@ -293,6 +293,68 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
             items=items,
         )
 
+    def count_by_cookbooks(self, cookbooks: Sequence[ReadCookBook]) -> dict[UUID4, int | None]:
+        """Fork: live recipe counts for every cookbook in ONE database round trip.
+
+        Cookbooks are saved filters, not a join table, so counting them the obvious way is
+        one query per cookbook on every sidebar render. Instead each cookbook's filter
+        becomes a scalar subquery column of a single SELECT and the database does the
+        fan-out, so round trips do not scale with cookbook count.
+
+        Deliberately mirrors page_all + add_pagination_to_query rather than re-deriving
+        them, so the number always equals what the cookbook page itself shows:
+          - same base query and household/group scoping,
+          - the same QueryFilterBuilder (the only correct interpreter of a filter string),
+          - and the same .distinct(), which is load-bearing: filter components join to
+            categories/tags/tools and a join duplicates the recipe row per match, so
+            without it a recipe matching two categories would silently count twice.
+
+        Call this on a by_user() repo — column_aliases (rating, last_made) only exist when
+        the repo has a user_id, and rating is per-user.
+
+        A cookbook whose filter will not parse gets None rather than failing the request.
+        """
+        if not cookbooks:
+            return {}
+
+        base_query = sa.select(self.model).filter(self.model.household_id.is_not(None))
+        base_query = base_query.filter_by(**self._filter_builder())
+        aliases = self.column_aliases
+
+        counts: dict[UUID4, int | None] = {}
+        label_by_cookbook: dict[UUID4, str] = {}
+        columns = []
+
+        for index, cookbook in enumerate(cookbooks):
+            try:
+                query = base_query
+                if cookbook.query_filter_string:
+                    query = QueryFilterBuilder(cookbook.query_filter_string).filter_query(
+                        query, model=self.model, column_aliases=aliases
+                    )
+            except ValueError as e:
+                self.logger.error(f"Skipping count for cookbook {cookbook.id}, invalid filter: {e}")
+                counts[cookbook.id] = None
+                continue
+
+            label = f"cb_{index}"
+            columns.append(
+                sa.select(sa.func.count())
+                .select_from(query.order_by(None).distinct().subquery())
+                .scalar_subquery()
+                .label(label)
+            )
+            label_by_cookbook[cookbook.id] = label
+
+        if not columns:
+            return counts
+
+        row = self.session.execute(sa.select(*columns)).one()
+        for cookbook_id, label in label_by_cookbook.items():
+            counts[cookbook_id] = row._mapping[label]
+
+        return counts
+
     def _build_recipe_filter(
         self,
         categories: list[UUID4] | None = None,

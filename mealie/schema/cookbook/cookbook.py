@@ -71,6 +71,10 @@ class UpdateCookBook(SaveCookBook):
 
 class ReadCookBook(UpdateCookBook):
     query_filter: Annotated[QueryFilterJSON, Field(validate_default=True)] = None  # type: ignore
+    # Fork: live recipe count, computed from the cookbook's filter and stitched in by the
+    # controller (not mapped off the ORM). None when it could not be computed — a failed
+    # count must never take the cookbook list down.
+    recipe_count: int | None = None
     household: CookbookHousehold | None = None
 
     model_config = ConfigDict(from_attributes=True)

@@ -109,6 +109,10 @@
                 <v-icon>{{ nav.icon }}</v-icon>
               </template>
               <v-list-item-title>{{ nav.title }}</v-list-item-title>
+              <!-- Fork: live cookbook recipe count. Muted, not a filled badge. -->
+              <template v-if="nav.count != null" #append>
+                <span class="fork-nav-count">{{ nav.count }}</span>
+              </template>
             </v-list-item>
           </div>
         </template>

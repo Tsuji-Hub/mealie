@@ -154,6 +154,15 @@
   }
 }
 
+/* Live cookbook recipe count in the sidebar: muted and quiet, per the editorial language
+ * (deliberately not a filled Material badge). Tabular so the column doesn't jitter. */
+.fork-nav-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fork-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ============================================================
  * De-materialize: cards flat, floating surfaces keep soft depth.
  */

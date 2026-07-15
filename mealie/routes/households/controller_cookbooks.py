@@ -34,6 +34,15 @@ class GroupCookbookController(BaseCrudController):
     def group_cookbooks(self):
         return get_repositories(self.session, group_id=self.group_id, household_id=None).cookbooks
 
+    @cached_property
+    def group_recipes_by_user(self):
+        # Mirrors GET /recipes exactly (group-wide + by_user), so a cookbook's count equals
+        # the number of recipes you actually see when you open it. by_user is required:
+        # column_aliases (rating, last_made) only exist with a user_id, and rating is per-user.
+        return get_repositories(self.session, group_id=self.group_id, household_id=None).recipes.by_user(
+            self.user.id
+        )
+
     def registered_exceptions(self, ex: type[Exception]) -> str:
         registered = {
             **mealie_registered_exceptions(self.translator),
@@ -55,6 +64,16 @@ class GroupCookbookController(BaseCrudController):
             pagination=q,
             override=ReadCookBook,
         )
+
+        # Fork: attach live recipe counts. ONE extra query total, not one per cookbook.
+        # Deliberately defensive: counting is a nice-to-have, the cookbook list is not, so
+        # any failure here degrades to no counts rather than a 500 that takes the sidebar down.
+        try:
+            counts = self.group_recipes_by_user.count_by_cookbooks(response.items)
+            for cookbook in response.items:
+                cookbook.recipe_count = counts.get(cookbook.id)
+        except Exception as e:
+            self.logger.exception(f"Failed to compute cookbook recipe counts: {e}")
 
         response.set_pagination_guides(router.url_path_for("get_all"), q.model_dump())
         return response

@@ -88,6 +88,10 @@
                   {{ $globals.icons.pages }}
                 </v-icon>
                 {{ cookbook.name }}
+                <!-- Fork: live recipe count, same muted treatment as the sidebar. -->
+                <span v-if="cookbook.recipeCount != null" class="fork-nav-count ml-2">
+                  {{ cookbook.recipeCount }}
+                </span>
               </div>
               <template #actions>
                 <div class="d-flex align-center">

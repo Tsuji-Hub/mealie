@@ -147,6 +147,8 @@ function cookbookAsLink(cookbook: ReadCookBook): SideBarLink {
     title: cookbook.name,
     to: `/g/${groupSlug.value}/cookbooks/${cookbook.slug || ""}`,
     restricted: false,
+    // Fork: live count from the API (null when it couldn't be computed -> nothing renders).
+    count: cookbook.recipeCount,
   };
 }
 
