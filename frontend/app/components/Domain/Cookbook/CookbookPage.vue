@@ -68,6 +68,7 @@
 <script setup lang="ts">
 import { useLazyRecipes } from "~/composables/recipes";
 import RecipeCardSection from "@/components/Domain/Recipe/RecipeCardSection.vue";
+import { isScopedByCategory } from "~/composables/cookbooks/use-cookbook-scope";
 import { useCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useCookbook } from "~/composables/use-group-cookbooks";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
@@ -89,59 +90,14 @@ const router = useRouter();
 
 const book = getOne(slug);
 
-/**
- * Is THIS cookbook scoped by the given category? The card can't know this — only the page
- * holds `book`. The filter is already parsed server-side (`queryFilter.parts`), so we read
- * it rather than re-implementing the DSL.
- *
- * Recognises only the narrow, unambiguous shape: a single bare part on
- * `recipe_category.name` with IN/=. Anything else — parens, OR, extra clauses, a tag/tool
- * filter — returns false and the card simply stays.
- * The costs are asymmetric: a stale card is what Ethan has today and a refresh fixes it;
- * wrongly vanishing one looks like data loss and he'd have no idea why. Bias to doing nothing.
- *
- * Do NOT guard on `recipeCount` here. It says nothing about whether this cookbook is scoped
- * by a category — that is entirely `queryFilter.parts`. It's also only stitched onto the LIST
- * route; this page loads via getOne, where it is always null, so guarding on it disabled the
- * whole feature silently (no error, just a vanish that never fired). Every guard in here must
- * test something that actually bears on the question.
- */
-function isScopedByCategory(category: RecipeCategory): boolean {
-  const cookbook = book.value;
-  if (!cookbook) {
-    return false;
-  }
-
-  const parts = cookbook.queryFilter?.parts;
-  if (!parts || parts.length !== 1) {
-    return false;
-  }
-
-  const part = parts[0];
-  if (!part || part.leftParenthesis || part.rightParenthesis || part.logicalOperator) {
-    return false;
-  }
-  // Match on the category NAME: every cookbook filters on recipe_category.name with the name
-  // string, not a UUID. Matching on id finds nothing and the vanish silently never fires.
-  // Compare exactly — names carry emoji, apostrophes, parens and "<".
-  if (part.attributeName !== "recipe_category.name") {
-    return false;
-  }
-
-  const operator = String(part.relationalOperator || "").toUpperCase();
-  if (operator !== "IN" && operator !== "=") {
-    return false;
-  }
-
-  const values = Array.isArray(part.value) ? part.value : part.value == null ? [] : [part.value];
-  return values.includes(category.name);
-}
-
 // Unfiled from a category. If that category is what scopes this view, the recipe no longer
 // belongs here — drop the card. It is NOT deleted: it still exists and keeps its other
 // cookbooks. Fired only after the PATCH succeeded, so there's nothing to undo.
+//
+// The decision needs `book`, which only this page holds — but the question itself is pure,
+// so it lives in use-cookbook-scope.ts where a test can pin it.
 function onCategoryRemoved(recipeSlug: string, category: RecipeCategory) {
-  if (isScopedByCategory(category)) {
+  if (isScopedByCategory(book.value, category)) {
     removeRecipe(recipeSlug);
   }
 }
