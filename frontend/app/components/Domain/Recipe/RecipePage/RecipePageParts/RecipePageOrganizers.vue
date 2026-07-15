@@ -71,9 +71,10 @@
 
     <RecipeNutrition
       v-if="recipe.settings.showNutrition"
-      v-model="recipe.nutrition"
+      :model-value="recipe.nutrition"
       class="mt-4"
       :edit="isEditForm"
+      @update:model-value="onNutritionUpdated"
     />
     <RecipeAssets
       v-if="recipe.settings.showAssets"
@@ -87,8 +88,9 @@
 
 <script setup lang="ts">
 import { usePageState } from "~/composables/recipe-page/shared-state";
+import { nutritionChanged, withoutEstimateFlag } from "~/composables/recipes/use-nutrition-estimate";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
-import type { Recipe } from "~/lib/api/types/recipe";
+import type { Nutrition, Recipe } from "~/lib/api/types/recipe";
 import RecipeOrganizerSelector from "@/components/Domain/Recipe/RecipeOrganizerSelector.vue";
 import RecipeNutrition from "~/components/Domain/Recipe/RecipeNutrition.vue";
 import RecipeChips from "@/components/Domain/Recipe/RecipeChips.vue";
@@ -96,4 +98,20 @@ import RecipeAssets from "@/components/Domain/Recipe/RecipeAssets.vue";
 
 const recipe = defineModel<NoUndefinedField<Recipe>>({ required: true });
 const { isEditForm } = usePageState(recipe.value.slug);
+
+/**
+ * A hand-edited macro stops being an estimate — it's his number now, so the ~ has to go.
+ *
+ * Gated on an actual value change rather than on the event firing: the number inputs
+ * round-trip a stored "450" back as 450, so treating every emit as an edit would drop the
+ * flag just for opening the edit form, and the ~ would vanish off a number nobody checked.
+ */
+function onNutritionUpdated(value: Nutrition) {
+  const edited = nutritionChanged(recipe.value.nutrition, value);
+  recipe.value.nutrition = value as NoUndefinedField<Nutrition>;
+
+  if (edited) {
+    recipe.value.extras = withoutEstimateFlag(recipe.value.extras) as NoUndefinedField<Recipe>["extras"];
+  }
+}
 </script>

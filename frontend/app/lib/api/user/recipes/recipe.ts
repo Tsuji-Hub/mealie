@@ -19,7 +19,12 @@ import type {
   RecipeTimelineEventUpdate,
 } from "~/lib/api/types/recipe";
 import type { SSEDataEventDone, SSEDataEventMessage } from "~/lib/api/types/response";
-import type { ApiRequestInstance, PaginationData, RequestResponse } from "~/lib/api/types/non-generated";
+import type {
+  ApiRequestInstance,
+  NutritionEstimate,
+  PaginationData,
+  RequestResponse,
+} from "~/lib/api/types/non-generated";
 import { SSEDataEventStatus } from "~/lib/api/types/non-generated";
 
 export type Parser = "nlp" | "brute" | "openai";
@@ -56,6 +61,7 @@ const routes = {
   recipesSlugCommentsId: (slug: string, id: number) => `${prefix}/recipes/${slug}/comments/${id}`,
 
   recipesSlugLastMade: (slug: string) => `${prefix}/recipes/${slug}/last-made`,
+  recipesSlugEstimateNutrition: (slug: string) => `${prefix}/recipes/${slug}/estimate-nutrition`,
   recipesTimelineEventId: (id: string) => `${prefix}/recipes/timeline/events/${id}`,
   recipesTimelineEventIdImage: (id: string) => `${prefix}/recipes/timeline/events/${id}/image`,
 };
@@ -250,6 +256,20 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
 
   async updateLastMade(recipeSlug: string, timestamp: string) {
     return await this.requests.patch<Recipe, RecipeLastMade>(routes.recipesSlugLastMade(recipeSlug), { timestamp });
+  }
+
+  /**
+   * Ask the AI provider for per-serving macros. Returns the estimate without saving, so the
+   * numbers can be reviewed first; the caller writes them with a normal recipe update.
+   *
+   * One recipe per call, on demand. The provider is on a free tier metered per project
+   * (~15 RPM), so never map this over a list — the importer drives it throttled from outside.
+   */
+  async estimateNutrition(recipeSlug: string) {
+    return await this.requests.post<NutritionEstimate, { save: boolean }>(
+      routes.recipesSlugEstimateNutrition(recipeSlug),
+      { save: false },
+    );
   }
 
   async createTimelineEvent(payload: RecipeTimelineEventIn) {

@@ -60,8 +60,14 @@
               <span class="fork-tile__ellip">{{ staticTag }}</span>
             </span>
 
-            <span v-if="calories" class="fork-tile__kcal">
-              <b>{{ calories }}</b> kcal
+            <!-- The tilde is load-bearing: an estimated 450 and a true FDL 359 sit side by
+                 side in this grid, and without it they are indistinguishable. -->
+            <span
+              v-if="calories"
+              class="fork-tile__kcal"
+              :title="estimated ? 'Estimated macros' : undefined"
+            >
+              <b>{{ markEstimate(calories, estimated) }}</b> kcal
             </span>
           </div>
 
@@ -119,6 +125,7 @@ import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
 import RecipeCardCategoryMenu from "./RecipeCardCategoryMenu.vue";
 import { tagHue } from "~/composables/recipes/use-tag-color";
+import { markEstimate } from "~/composables/recipes/use-nutrition-estimate";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { RecipeCategory, RecipeTag } from "~/lib/api/types/recipe";
 
@@ -131,6 +138,8 @@ interface Props {
   recipeId: string;
   imageHeight?: number;
   calories?: string | null;
+  /** Whether `calories` is an AI estimate rather than a sourced macro. */
+  estimated?: boolean;
   totalTime?: string | null;
   servings?: number;
   yieldText?: string | null;
@@ -141,6 +150,7 @@ const props = withDefaults(defineProps<Props>(), {
   categories: () => [],
   imageHeight: 220,
   calories: null,
+  estimated: false,
   totalTime: null,
   servings: 0,
   yieldText: null,

@@ -152,6 +152,12 @@ class RecipeSummary(MealieModel):
     # personal instance. (A subclass that avoided that dropped nutrition in prod, so we
     # keep it on the base.)
     nutrition: Nutrition | None = None
+    # Fork: extras on the summary for the same reason, and it is load-bearing rather than
+    # cosmetic. `extras["nutrition_estimated"]` is what makes an estimated 450 render as ~450
+    # instead of masquerading as a true FDL macro, and the grid is exactly where the two sit
+    # side by side. Without this the flag would reach the recipe page and silently never reach
+    # a card — the badge would look correct and be wrong. Same cost shape as nutrition above.
+    extras: dict | None = {}
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("recipe_servings", "recipe_yield_quantity", mode="before")
@@ -167,6 +173,16 @@ class RecipeSummary(MealieModel):
 
         return val
 
+    # extras are stored as key/value rows, not a JSON column, so they arrive as a list of
+    # ApiExtras and have to be folded into the dict the API exposes. Recipe declares an
+    # identical validator; it shadows this one harmlessly, and both are idempotent.
+    @field_validator("extras", mode="before")
+    def convert_extras_to_dict(cls, v):
+        if isinstance(v, dict):
+            return v
+
+        return {x.key_name: x.value for x in v} if v else {}
+
     @property
     def recipe_yield_display(self) -> str:
         return f"{self.recipe_yield_quantity} {self.recipe_yield}".strip()
@@ -180,6 +196,9 @@ class RecipeSummary(MealieModel):
             joinedload(RecipeModel.user).load_only(User.household_id),
             # nutrition is a scalar relationship, so selectinload is one batched query.
             selectinload(RecipeModel.nutrition),
+            # extras must be eagerly loaded here too: without it pydantic touches the
+            # relationship during serialization and lazy-loads one query per row.
+            selectinload(RecipeModel.extras),
         ]
 
 

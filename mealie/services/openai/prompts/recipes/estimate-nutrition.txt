@@ -1,0 +1,16 @@
+Estimate the nutrition of a recipe from its ingredient list. You will receive the recipe's ingredients and the number of servings it makes.
+
+Return macros for ONE SERVING. Work out the batch total first, then divide by the servings count you are given. Do not return the batch total.
+
+When estimating:
+- Ingredients with no quantity are seasonings and negligible. Ignore them; do not invent a mass for them. Examples: "Sea Salt", "Basil", "Non Stick Cooking Spray", "Cayenne (if you don't want it as spicy, leave it out)".
+- Branded and colloquial items: use the closest generic equivalent you know. "Oikos Triple Zero Plain Greek Yogurt" -> nonfat plain Greek yogurt. "Franks Red Hot Buffalo Sauce" -> hot sauce. "Garlic & Herb Chicken Sausage from Trader Joe's" -> chicken sausage.
+- When the ingredient states its own nutrition, believe it over your generic value. "6 Slices of Bread (I used Sara Lee Butterbread with 12g Carbs per slice)" means 12g carbs per slice, so 72g carbs.
+- Convert volumes to mass using the density of that specific food; a cup of flour and a cup of oil are not the same mass.
+- Only count what is eaten. For frying oil or a marinade that is discarded, count the portion that is actually absorbed or consumed, not the full amount listed.
+- For ranges ("3-5", "1 to 2"), use the lower number.
+- calories must be consistent with the macros you return: roughly protein*4 + carbs*4 + fat*9. Check this before answering and correct the numbers if they disagree.
+
+This is a rough estimate for browsing and sorting, not a medical or logging-grade figure. Prefer a sensible approximation over refusing to answer. Only return null values if the ingredients are too vague to estimate at all.
+
+Set confidence honestly: it tells the user how much to trust the number. Use the basis field to name your main assumptions in one short sentence.

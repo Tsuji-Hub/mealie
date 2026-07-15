@@ -14,6 +14,11 @@
         <div v-if="servings > 1" class="fork-macros__sub">
           Makes {{ servings }} {{ servingsLabel }}
         </div>
+        <!-- Explains the tilde. Without this the ~ is a mystery character; with it, the
+             number is honestly labelled as a guess he can overwrite. -->
+        <div v-if="isEstimated" class="fork-macros__est">
+          Estimated — edit any value to make it yours
+        </div>
       </div>
       <div class="fork-macros__grid">
         <div
@@ -81,25 +86,88 @@
           </v-btn>
         </template>
       </RecipeCardCategoryMenu>
+
+      <!-- Only when there are no macros to lose. The FDL numbers are ground truth and this
+           button must never be able to touch them. -->
+      <v-btn
+        v-if="canEstimate"
+        class="fork-btn"
+        variant="outlined"
+        :loading="estimating"
+        :prepend-icon="$globals.icons.robot"
+        @click="onEstimate"
+      >
+        Estimate macros
+      </v-btn>
     </div>
+
+    <!-- Review before anything is written: the estimate is a guess and Ethan gets the last word. -->
+    <BaseDialog
+      v-model="estimateDialog"
+      :title="'Estimated macros'"
+      :icon="$globals.icons.robot"
+      can-submit
+      :submit-text="'Accept'"
+      :submit-icon="$globals.icons.check"
+      :loading="accepting"
+      @submit="onAcceptEstimate"
+    >
+      <v-card-text v-if="estimate">
+        <div class="fork-est__grid">
+          <div
+            v-for="cell in estimateCells"
+            :key="cell.key"
+            class="fork-est__cell"
+          >
+            <div class="fork-est__num">
+              {{ cell.value }}<span class="fork-est__unit">{{ cell.unit }}</span>
+            </div>
+            <div class="fork-est__lbl">
+              {{ cell.label }}
+            </div>
+          </div>
+        </div>
+        <div class="fork-est__meta">
+          <div>Per 1 {{ unitLabel }}<span v-if="servings > 1"> · makes {{ servings }} {{ servingsLabel }}</span></div>
+          <div v-if="estimate.basis" class="fork-est__basis">
+            {{ estimate.basis }}
+          </div>
+          <div v-if="estimate.confidence != null" class="fork-est__conf">
+            Confidence {{ Math.round(estimate.confidence * 100) }}%
+          </div>
+        </div>
+        <div class="fork-est__note">
+          A rough estimate for browsing and sorting — not a logging-grade number. It will be
+          marked with a ~ until you edit it.
+        </div>
+      </v-card-text>
+    </BaseDialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useClipboard, useShare } from "@vueuse/core";
 import RecipeCardCategoryMenu from "~/components/Domain/Recipe/RecipeCardCategoryMenu.vue";
+import { useUserApi } from "~/composables/api";
 import { usePageState } from "~/composables/recipe-page/shared-state";
-import { getMacroCells } from "~/composables/recipes/use-macro-summary";
+import { getMacroCells, hasMacros } from "~/composables/recipes/use-macro-summary";
+import {
+  NUTRITION_ESTIMATED_KEY,
+  isNutritionEstimated,
+} from "~/composables/recipes/use-nutrition-estimate";
+import { useGroupSelf } from "~/composables/use-groups";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { alert } from "~/composables/use-toast";
-import type { NoUndefinedField } from "~/lib/api/types/non-generated";
+import type { NoUndefinedField, NutritionEstimate } from "~/lib/api/types/non-generated";
 import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 
 const props = defineProps<{ recipe: NoUndefinedField<Recipe> }>();
 
 const i18n = useI18n();
 const route = useRoute();
+const api = useUserApi();
 const auth = useMealieAuth();
+const { group } = useGroupSelf();
 const { isOwnGroup } = useLoggedInState();
 const { isCookMode, isEditMode, toggleCookMode } = usePageState(props.recipe.slug);
 
@@ -115,7 +183,21 @@ const groupSlug = computed(
   () => (route.params.groupSlug as string) || auth.user?.value?.groupSlug || "",
 );
 
-const macroCells = computed(() => getMacroCells(props.recipe.nutrition));
+// Local copies for the same reason as localCategories above: accepting an estimate must show
+// immediately, and the recipe object belongs to the page. Re-syncs if the page reloads it.
+const localNutrition = ref<Recipe["nutrition"]>({ ...(props.recipe.nutrition || {}) });
+const localExtras = ref<Record<string, unknown>>({ ...(props.recipe.extras || {}) });
+watch(
+  () => props.recipe.nutrition,
+  value => (localNutrition.value = { ...(value || {}) }),
+);
+watch(
+  () => props.recipe.extras,
+  value => (localExtras.value = { ...(value || {}) }),
+);
+
+const isEstimated = computed(() => isNutritionEstimated(localExtras.value));
+const macroCells = computed(() => getMacroCells(localNutrition.value, isEstimated.value));
 
 const servings = computed<number>(
   () => props.recipe.recipeServings || props.recipe.recipeYieldQuantity || 1,
@@ -234,6 +316,89 @@ const showMacros = computed(
   () => props.recipe.settings.showNutrition && macroCells.value.length > 0,
 );
 
+// --- Nutrition estimate -------------------------------------------------------------------
+// The ~160 TikTok imports have no macros anywhere — the source never had them. This asks the
+// AI provider for a rough number so those recipes are worth browsing and sorting.
+
+const estimateDialog = ref(false);
+const estimating = ref(false);
+const accepting = ref(false);
+const estimate = ref<NutritionEstimate | null>(null);
+
+/**
+ * Offered only when there is nothing to lose. The FDL macros came from the source, are exact,
+ * and are what MacroFactor consumes — this button must never be in a position to overwrite
+ * them, so it hides the moment any macro exists. (The server refuses too; this is the UI half.)
+ */
+const canEstimate = computed(
+  () =>
+    isOwnGroup.value
+    && !!group.value?.aiProviderSettings?.aiEnabled
+    && !hasMacros(localNutrition.value),
+);
+
+const estimateCells = computed(() =>
+  estimate.value ? getMacroCells(estimate.value.nutrition) : [],
+);
+
+async function onEstimate() {
+  estimating.value = true;
+  const { data, error } = await api.recipes.estimateNutrition(props.recipe.slug);
+  estimating.value = false;
+
+  if (error || !data) {
+    alert.error("Couldn't estimate macros");
+    return;
+  }
+  if (!getMacroCells(data.nutrition).length) {
+    alert.error("The ingredients were too vague to estimate");
+    return;
+  }
+
+  estimate.value = data;
+  estimateDialog.value = true;
+}
+
+/**
+ * Accept writes the numbers he just reviewed. Deliberately a normal recipe patch of exactly
+ * two fields rather than a second AI call: re-estimating on accept would burn the rate limit
+ * and could persist different numbers than the ones shown.
+ */
+async function onAcceptEstimate() {
+  if (!estimate.value) {
+    return;
+  }
+  accepting.value = true;
+
+  // Merge, don't replace: the recipe may carry sodium or fiber we didn't estimate, and extras
+  // holds unrelated keys like servingUnit. Mirrors build_patch on the server.
+  const nutrition = { ...(localNutrition.value || {}), ...stripNulls(estimate.value.nutrition) };
+  const extras = { ...(localExtras.value || {}), [NUTRITION_ESTIMATED_KEY]: "true" };
+
+  const { error } = await api.recipes.patchMany([
+    { id: props.recipe.id, nutrition, extras } as unknown as Recipe,
+  ]);
+  accepting.value = false;
+
+  if (error) {
+    alert.error("Couldn't save the estimate");
+    return;
+  }
+
+  // Only after the write succeeded — an optimistic ~ on a number that never persisted would
+  // be the one lie this feature exists to prevent.
+  localNutrition.value = nutrition;
+  localExtras.value = extras;
+  estimateDialog.value = false;
+}
+
+/** Keep the recipe's existing values for anything the model didn't estimate. */
+function stripNulls(nutrition: NutritionEstimate["nutrition"]): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(nutrition).filter(([, value]) => value !== null && value !== undefined),
+  ) as Record<string, string>;
+}
+
 // Share directly via the Web Share API against the public recipe URL, bypassing
 // the token dialog. Falls back to copying the link when sharing isn't supported.
 const { share, isSupported: shareIsSupported } = useShare();
@@ -292,6 +457,69 @@ async function onShare() {
 .fork-macros__sub {
   margin-top: 4px;
   font-size: 13.5px;
+  color: var(--fork-text-3);
+}
+
+/* Quiet on purpose: it should explain the ~, not compete with the numbers. */
+.fork-macros__est {
+  margin-top: 6px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--fork-text-3);
+}
+
+.fork-est__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 18px;
+}
+.fork-est__cell {
+  text-align: center;
+  padding: 0 6px;
+  min-width: 0;
+}
+.fork-est__cell + .fork-est__cell {
+  border-left: 1px solid var(--fork-hair);
+}
+.fork-est__num {
+  font-family: var(--fork-font-display);
+  font-weight: 540;
+  font-size: 1.75rem;
+  line-height: 1;
+  color: rgb(var(--v-theme-on-surface));
+}
+.fork-est__unit {
+  font-family: var(--fork-font-sans);
+  font-size: 0.48em;
+  font-weight: 600;
+  color: var(--fork-text-2);
+  margin-left: 1px;
+}
+.fork-est__lbl {
+  margin-top: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fork-text-3);
+}
+.fork-est__meta {
+  font-size: 13px;
+  color: var(--fork-text-2);
+}
+.fork-est__basis {
+  margin-top: 6px;
+  font-style: italic;
+}
+.fork-est__conf {
+  margin-top: 4px;
+  color: var(--fork-text-3);
+}
+.fork-est__note {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--fork-hair);
+  font-size: 12px;
   color: var(--fork-text-3);
 }
 

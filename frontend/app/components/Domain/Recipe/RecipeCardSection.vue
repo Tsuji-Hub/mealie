@@ -125,6 +125,7 @@
               :categories="recipe.recipeCategory!"
               :recipe-id="recipe.id!"
               :calories="recipe.nutrition?.calories"
+              :estimated="isNutritionEstimated(recipe.extras)"
               :total-time="recipe.totalTime"
               :servings="recipe.recipeServings"
               :yield-text="recipe.recipeYield"
@@ -175,6 +176,7 @@ import RecipeCard from "./RecipeCard.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
+import { isNutritionEstimated } from "~/composables/recipes/use-nutrition-estimate";
 import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 import { useUserSortPreferences } from "~/composables/use-users/preferences";
 import type { RecipeSearchQuery } from "~/lib/api/user/recipes/recipe";
