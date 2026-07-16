@@ -43,12 +43,14 @@
     {{ $t("tool.tools") }}
   </SearchFilter>
 
-  <!-- Food Filter -->
+  <!-- Food Filter. Its 2687 rows are fetched when the menu opens, not when the page renders —
+       that one request was 1.2 MB and 15x the rest of the page combined. -->
   <SearchFilter
     v-if="foods"
     v-model="selectedFoods"
     v-model:require-all="state.requireAllFoods"
     :items="foods"
+    @open="foodActions.hydrate()"
   >
     <v-icon start>
       {{ $globals.icons.foods }}
@@ -104,7 +106,11 @@ const {
 const { store: categories } = isOwnGroup.value ? useCategoryStore() : usePublicCategoryStore(groupSlug.value);
 const { store: tags } = isOwnGroup.value ? useTagStore() : usePublicTagStore(groupSlug.value);
 const { store: tools } = isOwnGroup.value ? useToolStore() : usePublicToolStore(groupSlug.value);
-const { store: foods } = isOwnGroup.value ? useFoodStore() : usePublicFoodStore(groupSlug.value);
+// Lazy, and hydrated by the filter's @open above. The store is module-scoped, so this and the
+// one in use-recipe-explorer-search share `initialized` — whichever fires first pays, once.
+const { store: foods, actions: foodActions } = isOwnGroup.value
+  ? useFoodStore(undefined, { lazy: true })
+  : usePublicFoodStore(groupSlug.value, undefined, { lazy: true });
 const { store: households } = isOwnGroup.value ? useHouseholdStore() : usePublicHouseholdStore(groupSlug.value);
 
 watch(

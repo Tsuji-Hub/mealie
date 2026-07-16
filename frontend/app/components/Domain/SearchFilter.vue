@@ -166,11 +166,22 @@ const modelValue = defineModel<ISearchableItem[]>();
 
 const emit = defineEmits<{
   (e: "update:requireAll", value: boolean | undefined): void;
+  /** The menu opened. Lets a parent defer loading its items until they're about to be seen. */
+  (e: "open"): void;
 }>();
 
 const state = reactive({
   menu: false,
 });
+
+watch(
+  () => state.menu,
+  (isOpen) => {
+    if (isOpen) {
+      emit("open");
+    }
+  },
+);
 
 // Use the search composable
 const { search: searchInput, filtered } = useSearch(computed(() => props.items));

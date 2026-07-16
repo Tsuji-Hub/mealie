@@ -74,7 +74,13 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
 
   // Store references
   const categories = isOwnGroup.value ? useCategoryStore() : usePublicCategoryStore(groupSlug.value);
-  const foods = isOwnGroup.value ? useFoodStore() : usePublicFoodStore(groupSlug.value);
+  // Lazy: this composable only needs the food store to resolve `?foods=` back into chips, which
+  // most page loads never do. Constructing it eagerly here is what put a 1.2 MB fetch on every
+  // visit to /g/home. Hydrated below when a query actually references foods, and by the filter
+  // menu when it opens.
+  const foods = isOwnGroup.value
+    ? useFoodStore(undefined, { lazy: true })
+    : usePublicFoodStore(groupSlug.value, undefined, { lazy: true });
   const households = isOwnGroup.value ? useHouseholdStore() : usePublicHouseholdStore(groupSlug.value);
   const tags = isOwnGroup.value ? useTagStore() : usePublicTagStore(groupSlug.value);
   const tools = isOwnGroup.value ? useToolStore() : usePublicToolStore(groupSlug.value);
@@ -339,6 +345,9 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
     }
 
     if (query.foods?.length) {
+      // The store is lazy, so nothing else will fill it on this path. Without this the wait
+      // below never resolves and a shared/bookmarked ?foods= URL silently loses its chips.
+      foods.actions.hydrate();
       promises.push(
         waitUntilAndExecute(
           () => {
