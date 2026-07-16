@@ -9,7 +9,7 @@
            servings number sitting in the same row as the macros read as a fifth stat. -->
       <div class="fork-macros__head">
         <div class="fork-macros__title">
-          Macros for 1 {{ unitLabel }}
+          Macros for {{ portionText }}
         </div>
         <div v-if="servings > 1" class="fork-macros__sub">
           Makes {{ servings }} {{ servingsLabel }}
@@ -128,7 +128,7 @@
           </div>
         </div>
         <div class="fork-est__meta">
-          <div>Per 1 {{ unitLabel }}<span v-if="servings > 1"> · makes {{ servings }} {{ servingsLabel }}</span></div>
+          <div>Per {{ portionText }}<span v-if="servings > 1"> · makes {{ servings }} {{ servingsLabel }}</span></div>
           <div v-if="estimate.basis" class="fork-est__basis">
             {{ estimate.basis }}
           </div>
@@ -155,6 +155,7 @@ import {
   NUTRITION_ESTIMATED_KEY,
   isNutritionEstimated,
 } from "~/composables/recipes/use-nutrition-estimate";
+import { extraText, portionLabel } from "~/composables/recipes/use-serving-label";
 import { useGroupSelf } from "~/composables/use-groups";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { alert } from "~/composables/use-toast";
@@ -264,15 +265,17 @@ function singularPhrase(phrase: string): string {
 // Manual escape hatch for any unit the guesser gets wrong or has never seen. Set
 // `servingUnit` in the recipe's API Extras (edit mode -> Advanced) to the singular noun,
 // e.g. "Cookie", and it wins over auto-detection. No code change needed per unit.
-const unitOverride = computed(() => {
-  const raw = (props.recipe.extras || {}).servingUnit;
-  return typeof raw === "string" ? raw.trim() : "";
-});
+const unitOverride = computed(() => extraText(props.recipe.extras, "servingUnit"));
 
 /** The name of ONE serving: "Sausage in Blanket", "Pizza Slice", else "serving". */
 const unitLabel = computed(
   () => unitOverride.value || (yieldNoun.value ? singularPhrase(yieldNoun.value) : "serving"),
 );
+
+// How ONE portion is named: "1/4 of the Pan" when extras.servingPhrase says so, else the
+// "1 Cookie" the template used to hardcode. On a recipe that makes 8, "1 Serving" names nothing
+// physical — FDL already knew the answer ("for 1/4th the Pan") and the importer dropped it.
+const portionText = computed(() => portionLabel(props.recipe.extras, unitLabel.value));
 
 // Short labels for hosts we import from often; anything else falls back to the
 // capitalized registrable domain ("skinnytaste.com" -> "Skinnytaste").
