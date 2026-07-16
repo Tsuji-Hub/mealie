@@ -148,6 +148,7 @@ import { useUserApi } from "~/composables/api";
 import { useGroupSelf } from "~/composables/use-groups";
 import { useTagStore } from "~/composables/store/use-tag-store";
 import { useNewRecipeOptions } from "~/composables/use-new-recipe-options";
+import { extractSharedUrl } from "~/composables/recipes/use-shared-url";
 import { validators } from "~/composables/use-validators";
 import type { VForm } from "~/types/auto-forms";
 
@@ -196,29 +197,21 @@ const recipeUrl = computed({
   set(recipe_import_url: string | null) {
     if (recipe_import_url !== null) {
       recipe_import_url = recipe_import_url.trim();
-      router.replace({ query: { ...route.query, recipe_import_url } });
+      // Drop the raw shared text once the box holds a URL. It has been consumed, and leaving it
+      // in the query means clearing the box falls back to it and the original link reappears.
+      const { recipe_import_text: _consumed, ...query } = route.query;
+      router.replace({ query: { ...query, recipe_import_url } });
     }
   },
   get() {
-    // Prefer the 'url' share field (recipe_import_url, populated by Chrome when
-    // sharing a page URL). Fall back to the 'text' share field (recipe_import_text)
-    // for apps that share URLs as plain text, but only when the text value is
-    // actually a valid http/https URL — shared text can be arbitrary.
-    const urlFromField = route.query.recipe_import_url as string | null;
-    if (urlFromField) {
-      return urlFromField;
-    }
-    const textFromField = route.query.recipe_import_text as string | null;
-    if (textFromField) {
-      try {
-        const parsed = new URL(textFromField);
-        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-          return textFromField;
-        }
-      }
-      catch { /* not a URL, ignore */ }
-    }
-    return null;
+    // Prefer the 'url' share field (populated by Chrome when sharing a page), and otherwise dig
+    // the link out of 'text'. Requiring the text to BE a URL only covered clean-URL shares:
+    // Android apps overwhelmingly send prose with the link inside it, and TikTok — the whole
+    // reason this path exists — never sends a 'url' field at all.
+    return extractSharedUrl(
+      route.query.recipe_import_url as string | null,
+      route.query.recipe_import_text as string | null,
+    );
   },
 });
 
