@@ -32,6 +32,7 @@ from mealie.services.openai import OpenAIService
 from mealie.services.scraper.scraped_extras import ScrapedExtras
 
 from . import cleaner
+from .tiktok import OEMBED_ENDPOINT, is_short_link, is_tiktok_url, normalize_for_oembed
 
 SCRAPER_TIMEOUT = 15
 
@@ -429,6 +430,114 @@ class RecipeScraperOpenAI(RecipeScraperPackage):
             await on_progress(self.translator.t("recipe.create-progress.creating-recipe-with-ai"))
 
         return await super().parse()
+
+
+class RecipeScraperTikTokOEmbed(RecipeScraperOpenAI):
+    """
+    Imports a TikTok by reading its caption, which is the only place the recipe exists.
+
+    TikTok serves a JS shell — ~377 KB, zero ld+json blocks, one occurrence of the word "recipe" —
+    so every HTML-based strategy correctly finds nothing. The caption comes from the public oEmbed
+    endpoint instead (no auth, no key), and then goes through the same AI prompt every other
+    RecipeScraperOpenAI import uses.
+    """
+
+    #: A caption this short is a title or a hashtag dump, never a recipe. Cheap early exit that
+    #: also keeps us from spending an AI call to be told what we can already see.
+    MIN_CAPTION_LENGTH = 60
+
+    def can_scrape(self) -> bool:
+        if not (self.url and is_tiktok_url(self.url)):
+            return False
+
+        settings = self.repos.group_ai_provider_settings.get_one(self.repos.group_id)
+        return bool(settings and settings.ai_enabled)
+
+    async def _resolve_short_link(self, url: str) -> str:
+        """
+        Follow a vm.tiktok.com / tiktok.com/t/ link to the post it points at.
+
+        Needed because oEmbed 400s on the /photo/ form, and a short link that resolves to a photo
+        post hits that inside oEmbed where the /photo/ -> /video/ swap can't reach it. Resolving
+        here puts the canonical URL back in front of the normaliser.
+        """
+        try:
+            transport = safehttp.AsyncSafeTransport(impersonate="chrome", default_headers=True, verify=False)
+            async with AsyncClient(transport=transport) as client:
+                response = await client.get(url, timeout=SCRAPER_TIMEOUT, follow_redirects=True)
+                return str(response.url) or url
+        except Exception:
+            self.logger.exception(f"Failed to resolve TikTok short link {url}")
+            return url
+
+    async def _fetch_caption(self, url: str) -> str | None:
+        if is_short_link(url):
+            url = await self._resolve_short_link(url)
+
+        oembed_url = normalize_for_oembed(url)
+        if not oembed_url:
+            self.logger.debug(f"Not a TikTok post URL, nothing to fetch: {url}")
+            return None
+
+        try:
+            transport = safehttp.AsyncSafeTransport(default_headers=True, verify=False)
+            async with AsyncClient(transport=transport) as client:
+                response = await client.get(
+                    OEMBED_ENDPOINT,
+                    params={"url": oembed_url},
+                    timeout=SCRAPER_TIMEOUT,
+                    follow_redirects=True,
+                )
+        except Exception:
+            self.logger.exception(f"Failed to reach TikTok oEmbed for {url}")
+            return None
+
+        if response.status_code != 200:
+            self.logger.error(f"TikTok oEmbed returned {response.status_code} for {oembed_url}")
+            return None
+
+        try:
+            caption = str(response.json().get("title") or "").strip()
+        except Exception:
+            self.logger.exception(f"TikTok oEmbed returned a body we couldn't read for {oembed_url}")
+            return None
+
+        return caption or None
+
+    async def get_html(self, url: str) -> str:
+        """
+        The caption, converted to a recipe by the AI, as ld+json in a minimal HTML page.
+
+        Deliberately does NOT call super().get_html(): the parent starts from
+        `self.raw_html or await safe_scrape_html(url)`, and raw_html is already populated with
+        TikTok's useless JS shell (RecipeScraper.scrape fetches it once and hands it to every
+        strategy). Falling back to it would feed 377 KB of JavaScript to the model and land us
+        exactly where we started.
+        """
+        caption = await self._fetch_caption(url)
+        if not caption:
+            return ""
+
+        if len(caption) < self.MIN_CAPTION_LENGTH:
+            # The fetch worked; there just isn't a recipe in it. ~13% of captions are commentary
+            # or "full recipe on my website". Log the distinction, because "oEmbed failed" and
+            # "this caption has no recipe in it" need different responses from a human.
+            self.logger.info(f"TikTok caption is too short to be a recipe ({len(caption)} chars): {url}")
+            return ""
+
+        service = OpenAIService(self.repos)
+        try:
+            prompt = service.get_prompt("recipes.scrape-recipe")
+            response = await service.get_response(
+                prompt, f"Convert this content to JSON: {caption}", response_schema=OpenAIText
+            )
+            if not (response and response.text):
+                raise Exception("OpenAI did not return any data")
+
+            return self.ld_json_to_html(response.text)
+        except Exception:
+            self.logger.exception(f"OpenAI was unable to extract a recipe from the TikTok caption for {url}")
+            return ""
 
 
 class TranscribedAudio(TypedDict):

@@ -13,11 +13,16 @@ from .scraper_strategies import (
     RecipeScraperOpenAITranscription,
     RecipeScraperOpenGraph,
     RecipeScraperPackage,
+    RecipeScraperTikTokOEmbed,
     safe_scrape_html,
 )
 
 DEFAULT_SCRAPER_STRATEGIES: list[type[ABCScraperStrategy]] = [
     RecipeScraperPackage,
+    # Before the AI strategies, because for a TikTok they cannot succeed: the page is a JS shell
+    # with no recipe in it. After Package, which costs nothing here (it fails instantly on TikTok)
+    # and preserves the rule that real schema.org always wins.
+    RecipeScraperTikTokOEmbed,
     RecipeScraperOpenAITranscription,
     RecipeScraperOpenAI,
     RecipeScraperOpenGraph,
