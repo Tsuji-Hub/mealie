@@ -101,10 +101,16 @@ class NutritionEstimateService(BaseService):
             ],
         )
 
+        # Estimating is arithmetic; scraping is text structuring. A model can be good at one and
+        # bad at the other — a cheap scraper will happily recall canonical per-100g values instead
+        # of doing the sum, and be wrong by a third without ever erroring. So the estimate uses the
+        # nutrition slot when it's set. When it isn't, this is None and get_response falls back to
+        # the default provider, which is exactly the old behaviour.
         response = await service.get_response(
             prompt,
             json.dumps(ingredients, separators=(",", ":")),
             response_schema=OpenAINutrition,
+            provider=service.nutrition_provider,
         )
         if not response:
             raise exceptions.OpenAIServiceError("No response from the AI provider")

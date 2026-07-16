@@ -83,8 +83,15 @@ class AIProviderSettingsUpdate(MealieModel):
     default_provider_id: UUID4 | None
     audio_provider_id: UUID4 | None
     image_provider_id: UUID4 | None
+    # Defaulted, unlike the three above, so a client that predates this field can still PUT
+    # settings. The update is a full model_dump replace, so the tradeoff is that such a client
+    # resets the slot to "use the default" rather than getting a 422 — which is the old behaviour,
+    # not data loss. Making it required would break every existing caller for no gain.
+    nutrition_provider_id: UUID4 | None = None
 
-    @field_validator("default_provider_id", "audio_provider_id", "image_provider_id", mode="before")
+    @field_validator(
+        "default_provider_id", "audio_provider_id", "image_provider_id", "nutrition_provider_id", mode="before"
+    )
     def validate_as_none(val: Any | None) -> Any | None:
         return val or None
 
@@ -94,6 +101,7 @@ class AIProviderSettingsUpdate(MealieModel):
             joinedload(AIProviderSettings.default_provider),
             joinedload(AIProviderSettings.audio_provider),
             joinedload(AIProviderSettings.image_provider),
+            joinedload(AIProviderSettings.nutrition_provider),
         ]
 
 
@@ -105,7 +113,12 @@ class AIProviderSettingsOut(AIProviderSettingsUpdate):
     @model_validator(mode="after")
     def validate_providers(self) -> Self:
         existing_ids = {provider.id for provider in self.providers}
-        for provider_id_name in ["default_provider_id", "audio_provider_id", "image_provider_id"]:
+        for provider_id_name in [
+            "default_provider_id",
+            "audio_provider_id",
+            "image_provider_id",
+            "nutrition_provider_id",
+        ]:
             if not (val := getattr(self, provider_id_name, None)):
                 continue
 
@@ -129,6 +142,19 @@ class AIProviderSettingsOut(AIProviderSettingsUpdate):
     def image_provider_enabled(self) -> bool:
         return self.ai_enabled and self.image_provider_id is not None
 
+    @computed_field  # type: ignore[misc]
+    @property
+    def nutrition_provider_enabled(self) -> bool:
+        """
+        Whether a SEPARATE model is configured for estimates.
+
+        Reports the slot, not the feature. Estimates work whenever AI is on — an empty slot falls
+        back to the default provider — so this must never be used to gate the estimator. That is
+        the mistake `audio_provider_enabled` makes in `can_scrape()`, and it is why transcription
+        silently never runs. This exists so the UI can show which model estimates will use.
+        """
+        return self.ai_enabled and self.nutrition_provider_id is not None
+
     @classmethod
     def loader_options(cls) -> list[LoaderOption]:
         return [
@@ -136,4 +162,5 @@ class AIProviderSettingsOut(AIProviderSettingsUpdate):
             joinedload(AIProviderSettings.default_provider),
             joinedload(AIProviderSettings.audio_provider),
             joinedload(AIProviderSettings.image_provider),
+            joinedload(AIProviderSettings.nutrition_provider),
         ]

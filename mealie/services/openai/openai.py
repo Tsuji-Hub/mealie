@@ -128,6 +128,14 @@ class OpenAIService(BaseService):
             if self.provider_settings and self.provider_settings.image_provider_id
             else None
         )
+        # None when unset, which callers pass straight to get_response: `provider or
+        # _get_provider(...)` then falls back to the default. Not part of _get_provider's
+        # attachment dispatch — nutrition isn't attachment-shaped, it's a caller choosing.
+        self.nutrition_provider = (
+            self.repos.group_ai_providers.get_one(self.provider_settings.nutrition_provider_id)
+            if self.provider_settings and self.provider_settings.nutrition_provider_id
+            else None
+        )
 
         # Build client
         settings = get_app_settings()

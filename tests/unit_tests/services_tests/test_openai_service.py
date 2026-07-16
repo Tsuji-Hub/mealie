@@ -13,6 +13,9 @@ def _make_mock_repos() -> MagicMock:
     provider_settings.default_provider_id = uuid4()
     provider_settings.audio_provider_id = None
     provider_settings.image_provider_id = None
+    # Explicit: an unset MagicMock attribute is truthy, so leaving this out would silently give
+    # the service a nutrition provider it should not have.
+    provider_settings.nutrition_provider_id = None
 
     repos = MagicMock()
     repos.group_id = uuid4()

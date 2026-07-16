@@ -140,6 +140,20 @@ class AIProviderSettings(SqlAlchemyBase, BaseMixins):
         post_update=True,
     )
 
+    # Scraping and estimating want opposite things from a model: scraping is text structuring on
+    # every import, estimating is arithmetic on a button press. A model that scrapes well and is
+    # cheap enough to run constantly can still recall canonical per-100g values instead of doing
+    # the sum. Unlike the slots above, an unset value here means "use the default", not "disabled".
+    nutrition_provider_id: orm.Mapped[GUID | None] = orm.mapped_column(
+        GUID, sa.ForeignKey("ai_providers.id", use_alter=True), nullable=True, index=True
+    )
+    nutrition_provider: orm.Mapped[AIProvider | None] = orm.relationship(
+        AIProvider,
+        foreign_keys="[AIProviderSettings.nutrition_provider_id]",
+        uselist=False,
+        post_update=True,
+    )
+
     @auto_init()
     def __init__(self, **_) -> None:
         pass

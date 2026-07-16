@@ -62,10 +62,12 @@ export interface AIProviderSettingsOut {
   defaultProviderId: string | null;
   audioProviderId: string | null;
   imageProviderId: string | null;
+  nutritionProviderId?: string | null;
   providers: AIProviderSummary[];
   aiEnabled: boolean;
   audioProviderEnabled: boolean;
   imageProviderEnabled: boolean;
+  nutritionProviderEnabled: boolean;
 }
 export interface AIProviderSummary {
   id: string;
@@ -75,6 +77,7 @@ export interface AIProviderSettingsUpdate {
   defaultProviderId: string | null;
   audioProviderId: string | null;
   imageProviderId: string | null;
+  nutritionProviderId?: string | null;
 }
 export interface AIProviderUpdate {
   name: string;

@@ -65,6 +65,24 @@
           {{ $t("group.ai-provider-settings.image-provider-description") }}
         </v-card-subtitle>
       </v-col>
+      <!-- Unlike the slots above, leaving this empty does not disable anything — estimates
+           just use the default provider. -->
+      <v-col cols="12">
+        <v-autocomplete
+          v-model="local.nutritionProviderId"
+          :label="$t('group.ai-provider-settings.nutrition-provider')"
+          :items="local.providers"
+          item-title="name"
+          item-value="id"
+          clearable
+          hide-details
+          density="compact"
+          variant="outlined"
+        />
+        <v-card-subtitle class="mt-1">
+          {{ $t("group.ai-provider-settings.nutrition-provider-description") }}
+        </v-card-subtitle>
+      </v-col>
     </v-row>
 
     <GroupAIProviderDialog
