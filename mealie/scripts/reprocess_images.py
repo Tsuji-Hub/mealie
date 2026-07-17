@@ -21,17 +21,22 @@ NON_ORIGINAL_FILENAMES = {"min-original.webp", "tiny-original.webp"}
 
 def check_if_tiny_image_is_old(image_path: Path) -> bool:
     with Image.open(image_path) as img:
-        # This will miss images which were originally smaller than 300x300,
-        # but we probably don't care about those anyway
-        return img.width == 300 and img.height == 300
+        # Fixed squares mark the two previous tiny formats: 300x300 (pre-2026) and 600x600 (the
+        # era that upscaled small sources, making tiny LARGER than min). Current tinies are
+        # <=200px on the longest edge, or source-sized passthroughs — never these exact squares,
+        # since even a square source >=600px now yields a 200x200 tiny.
+        # This will miss images which were originally smaller than the targets,
+        # but we probably don't care about those anyway.
+        return (img.width, img.height) in {(300, 300), (600, 600)}
 
 
 def check_needs_reprocess(recipe_id: UUID4) -> bool:
     """
     Check if a recipe's images need reprocessing by examining tiny image dimensions.
-    New processing creates 600x600 tiny images, old processing created 300x300.
+    Current processing creates tinies <=200px on the longest edge (never upscaled); older eras
+    created fixed 300x300 or 600x600 squares.
 
-    Returns True if needs reprocessing (has old 300x300 tiny image or missing images).
+    Returns True if needs reprocessing (has an old fixed-square tiny image or missing images).
     """
 
     try:

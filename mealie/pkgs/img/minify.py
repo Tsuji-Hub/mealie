@@ -130,8 +130,11 @@ class PillowMinifier(ABCMinifier):
         img_ratio = img.width / img.height
         target_ratio = target_width / target_height
 
-        # If original image smaller than target, do not upscale
-        if img.width < size[0] or img.height < size[1]:
+        # If original image smaller than target, do not upscale. Compared against the FINAL
+        # (post-doubling) target: the guard used to check the pre-doubled size, so a 300x400
+        # phone photo passed it and was upscaled to fill 600x600 — making "tiny" LARGER than
+        # both "min" and the original, in bytes and pixels, for every small source.
+        if img.width < target_width or img.height < target_height:
             return img
 
         # Resize first to fill area while preserving aspect ratio
@@ -183,8 +186,11 @@ class PillowMinifier(ABCMinifier):
                     if not force and min_dest.exists():
                         self.logger.info(f"{min_dest} already exists")
                     else:
+                        # 600px longest edge: a ~300px grid tile at 2x DPR. The old 1024 target
+                        # was a no-op for phone-sourced images (thumbnail never upscales), so
+                        # "min" shipped the full-size image into a 300x220 tile.
                         mini = img.copy()
-                        mini.thumbnail((1024, 1024), Image.LANCZOS)
+                        mini.thumbnail((600, 600), Image.LANCZOS)
                         result_path = PillowMinifier.to_webp(dest=min_dest, quality=80, img=mini)
                         self.logger.info(f"{result_path} created")
                         success = True
@@ -193,7 +199,10 @@ class PillowMinifier(ABCMinifier):
                     if not force and tiny_dest.exists():
                         self.logger.info(f"{tiny_dest} already exists")
                     else:
-                        tiny = PillowMinifier.crop_center(img.copy(), size=(300, 300))
+                        # A real thumbnail: 200x200 final (100x100 at 2x DPR), and crop_center
+                        # no longer upscales — so the ladder is monotonic, tiny < min <= original
+                        # in both pixels and bytes, for every source size.
+                        tiny = PillowMinifier.crop_center(img.copy(), size=(100, 100))
                         result_path = PillowMinifier.to_webp(dest=tiny_dest, quality=80, img=tiny)
                         self.logger.info(f"{result_path} created")
                         success = True
