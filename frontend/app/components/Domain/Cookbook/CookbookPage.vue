@@ -57,6 +57,7 @@
           class="mb-5 mx-1"
           :recipes="recipes"
           :query="{ cookbook: slug }"
+          :cache-scope="cacheScope"
           @sort-recipes="assignSorted"
           @replace-recipes="replaceRecipes"
           @append-recipes="appendRecipes"
@@ -72,6 +73,7 @@
 import { useLazyRecipes } from "~/composables/recipes";
 import RecipeCardSection from "@/components/Domain/Recipe/RecipeCardSection.vue";
 import { isScopedByCategory } from "~/composables/cookbooks/use-cookbook-scope";
+import { cookbookListScope } from "~/composables/recipes/use-list-cache";
 import { useCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useCookbook } from "~/composables/use-group-cookbooks";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
@@ -92,6 +94,10 @@ const { actions } = useCookbookStore();
 const router = useRouter();
 
 const book = getOne(slug);
+
+// SWR scope for the grid: a revisit paints the cached cards instantly and revalidates behind
+// them. Built by the shared helper so the prefetcher warms exactly this key.
+const cacheScope = computed(() => cookbookListScope(isOwnGroup.value, groupSlug.value, slug));
 
 // Unfiled from a category. If that category is what scopes this view, the recipe no longer
 // belongs here — drop the card. It is NOT deleted: it still exists and keeps its other

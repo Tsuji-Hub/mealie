@@ -19,6 +19,7 @@ import type {
   RecipeTimelineEventUpdate,
 } from "~/lib/api/types/recipe";
 import type { SSEDataEventDone, SSEDataEventMessage } from "~/lib/api/types/response";
+import { flushListCache } from "~/composables/recipes/use-list-cache";
 import type {
   ApiRequestInstance,
   NutritionEstimate,
@@ -110,6 +111,32 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
     this.share = new RecipeShareApi(requests);
   }
 
+  // ---- SWR invalidation --------------------------------------------------------------------
+  // Every recipe mutation flushes the list cache HERE, at the one place all of them pass
+  // through, rather than at each of the many call sites (edit page, category menu, share-target
+  // import, estimator accept...). A missed site wouldn't error — it would let a cached grid
+  // resurrect a card Ethan just unfiled, silently. Reads never flush.
+
+  async createOne(payload: CreateRecipe) {
+    flushListCache();
+    return await super.createOne(payload);
+  }
+
+  async updateOne(itemId: string | number, payload: Recipe) {
+    flushListCache();
+    return await super.updateOne(itemId, payload);
+  }
+
+  async patchOne(itemId: string, payload: Partial<Recipe>) {
+    flushListCache();
+    return await super.patchOne(itemId, payload);
+  }
+
+  async deleteOne(itemId: string | number) {
+    flushListCache();
+    return await super.deleteOne(itemId);
+  }
+
   async search(rsq: RecipeSearchQuery) {
     return await this.requests.get<PaginationData<Recipe>>(route(routes.recipesBase, rsq));
   }
@@ -157,6 +184,8 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
   }
 
   private streamRecipeCreate(streamRoute: string, payload: object, onProgress?: (message: string) => void): Promise<RequestResponse<string>> {
+    // Covers every streaming create (by URL, by HTML/JSON) in one place, incl. the share target.
+    flushListCache();
     return new Promise((resolve) => {
       const { token } = useMealieAuth();
 
@@ -218,6 +247,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
   }
 
   async createManyByUrl(payload: CreateRecipeByUrlBulk) {
+    flushListCache();
     return await this.requests.post<string>(routes.recipesCreateUrlBulk, payload);
   }
 
@@ -233,6 +263,7 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
       apiRoute = `${apiRoute}?translateLanguage=${translateLanguage}`;
     }
 
+    flushListCache();
     return await this.requests.post<string>(apiRoute, formData);
   }
 
@@ -247,14 +278,20 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
   }
 
   async updateMany(payload: Recipe[]) {
+    flushListCache();
     return await this.requests.put<Recipe[]>(routes.recipesBase, payload);
   }
 
   async patchMany(payload: Recipe[]) {
+    // The quick-categorize menu and the unfile-vanish both mutate through here, so this one
+    // flush is what keeps a cached grid from resurrecting a card Ethan just unfiled.
+    flushListCache();
     return await this.requests.patch<Recipe[]>(routes.recipesBase, payload);
   }
 
   async updateLastMade(recipeSlug: string, timestamp: string) {
+    // last-made affects ordering under the last-made sort, so cached lists are stale too
+    flushListCache();
     return await this.requests.patch<Recipe, RecipeLastMade>(routes.recipesSlugLastMade(recipeSlug), { timestamp });
   }
 

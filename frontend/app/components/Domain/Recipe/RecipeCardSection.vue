@@ -183,6 +183,14 @@ import RecipeCardSkeletonGrid from "./RecipeCardSkeletonGrid.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";
+import {
+  LIST_PAGE_SIZE,
+  getCachedList,
+  listCacheKey,
+  resolveListParams,
+  sameList,
+  storeCachedList,
+} from "~/composables/recipes/use-list-cache";
 import { isNutritionEstimated } from "~/composables/recipes/use-nutrition-estimate";
 import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 import { useUserSortPreferences } from "~/composables/use-users/preferences";
@@ -199,6 +207,12 @@ interface Props {
   singleColumn?: boolean;
   recipes?: Recipe[];
   query?: RecipeSearchQuery | null;
+  /**
+   * Opt-in SWR caching scope (see use-list-cache.ts). Pages with a stable query (cookbook pages)
+   * pass one and get instant revisits; the explorer deliberately passes none — its query mutates
+   * through search state, and its ready-gate stays exactly as it is.
+   */
+  cacheScope?: string | null;
 }
 const props = withDefaults(defineProps<Props>(), {
   disableToolbar: false,
@@ -208,6 +222,7 @@ const props = withDefaults(defineProps<Props>(), {
   singleColumn: false,
   recipes: () => [],
   query: null,
+  cacheScope: null,
 });
 
 const emit = defineEmits<{
@@ -249,7 +264,7 @@ const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
 
 const page = ref(1);
-const perPage = 32;
+const perPage = LIST_PAGE_SIZE;
 const hasMore = ref(true);
 const ready = ref(false);
 const loading = ref(false);
@@ -275,27 +290,88 @@ const queryFilter = computed(() => {
   // }
 });
 
-async function fetchRecipes(pageCount = 1) {
-  const orderDir = props.query?.orderDirection || preferences.value.orderDirection;
-  const orderByNullPosition = props.query?.orderByNullPosition || orderDir === "asc" ? "first" : "last";
-  const orderBy = props.query?.orderBy || preferences.value.orderBy;
-  const localQuery = { ...props.query };
-  if (orderBy === "random") {
-    localQuery._searchSeed = randomSeed.value;
-  }
-  return await fetchMore(
-    page.value,
-    perPage * pageCount,
-    orderBy,
-    orderDir,
-    orderByNullPosition,
-    localQuery,
+/**
+ * The resolved parameters for a fetch of `pageCount` pages. Shared with the prefetcher via
+ * resolveListParams so a hover warms exactly the entry this page will look up — the resolution
+ * must not be duplicated here, or the two drift and prefetch lands in nothing.
+ */
+function currentParams(pageCount = 1) {
+  return resolveListParams(
+    props.query ?? null,
+    preferences.value.orderBy,
+    preferences.value.orderDirection,
     // we use a computed queryFilter to filter out recipes that have a null value for the property we're sorting by
     queryFilter.value,
+    perPage * pageCount,
+    randomSeed.value,
   );
 }
 
+/** The SWR key for this grid's first-load fetch, or null when uncacheable (random sort, no scope). */
+function currentCacheKey(): string | null {
+  if (!props.cacheScope) {
+    return null;
+  }
+  // Doubled page-1 fetch is this grid's first-load shape (see initRecipes) — key must match it.
+  return listCacheKey(props.cacheScope, currentParams(2));
+}
+
+async function fetchRecipes(pageCount = 1) {
+  const p = currentParams(pageCount);
+  return await fetchMore(
+    page.value,
+    p.perPage,
+    p.orderBy,
+    p.orderDirection,
+    p.orderByNullPosition,
+    p.query,
+    p.queryFilter,
+  );
+}
+
+/**
+ * Refetch page 1 behind a cache hit and swap only if something changed. A byte-identical
+ * result must not re-emit: swapping an unchanged list reflows the grid for nothing.
+ */
+async function revalidate(key: string) {
+  const shown = getCachedList(key)?.recipes ?? [];
+  const p = currentParams(2);
+  const fresh = await fetchMore(1, p.perPage, p.orderBy, p.orderDirection, p.orderByNullPosition, p.query, p.queryFilter);
+
+  hasMore.value = fresh.length >= perPage;
+  storeCachedList(key, fresh, hasMore.value);
+
+  if (!sameList(shown, fresh)) {
+    emit(REPLACE_RECIPES_EVENT, fresh);
+  }
+}
+
+// SWR hit, decided during setup so the FIRST render already skips the skeletons — deciding in
+// onMounted still inserts skeleton nodes for one (unpainted) tick, which a MutationObserver
+// probe rightly flags. Deep scroll restores (savedPage > 2) keep the network path: their
+// multi-page fetch is a different shape than the cached first page.
+const warmKey = currentCacheKey();
+const warmSavedPage = getSavedPage(route.path);
+const warmEntry = warmKey && !(warmSavedPage && warmSavedPage > 2) ? getCachedList(warmKey) : null;
+if (warmEntry) {
+  page.value = 2;
+  hasMore.value = warmEntry.hasMore;
+  ready.value = true;
+}
+
 onMounted(async () => {
+  // Warm path: emit the cached cards (pre-paint — the user's first frame IS real cards), then
+  // refetch behind them and swap only if something changed.
+  if (warmKey && warmEntry) {
+    emit(REPLACE_RECIPES_EVENT, warmEntry.recipes);
+    if (warmSavedPage) {
+      await nextTick();
+      restorePosition(route.path);
+    }
+    await revalidate(warmKey);
+    return;
+  }
+
   loading.value = true;
   const savedPage = getSavedPage(route.path);
 
@@ -353,6 +429,12 @@ async function initRecipes() {
   page.value = page.value + 1;
 
   emit(REPLACE_RECIPES_EVENT, newRecipes);
+
+  // Write-through: the next visit to this grid paints these cards instead of skeletons.
+  const key = currentCacheKey();
+  if (key) {
+    storeCachedList(key, newRecipes, hasMore.value);
+  }
 }
 
 const infiniteScroll = useThrottleFn(async () => {

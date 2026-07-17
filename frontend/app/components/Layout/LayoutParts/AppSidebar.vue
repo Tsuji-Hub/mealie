@@ -78,7 +78,18 @@
       <v-divider class="mt-2" />
       <v-list v-model:selected="state.secondarySelected" nav density="compact" exact>
         <template v-for="nav in secondaryLinks">
-          <div v-if="!nav.restricted || isOwnGroup" :key="nav.key || nav.title">
+          <!-- Pointer/touch on a cookbook link warms the SWR cache so the click paints real
+               cards, not skeletons. The handlers live on this plain div, NOT on the v-list-item:
+               Vuetify does not forward pointerenter/touchstart listeners to its root element
+               (verified: the rendered anchor carries no Vue listeners), so on the component they
+               silently never fire. Non-cookbook navs no-op (no /cookbooks/ in nav.to). -->
+          <div
+            v-if="!nav.restricted || isOwnGroup"
+            :key="nav.key || nav.title"
+            @pointerenter="onNavHoverStart(nav.to)"
+            @pointerleave="onNavHoverEnd(nav.to)"
+            @touchstart.passive="onNavTouch(nav.to)"
+          >
             <!-- Multi Items -->
             <v-list-group
               v-if="nav.children"
@@ -92,15 +103,24 @@
                 <v-list-item v-bind="hoverProps" :prepend-icon="nav.icon" :title="nav.title" />
               </template>
 
-              <v-list-item
-                v-for="child in nav.children"
-                :key="child.key || child.title"
-                exact
-                :to="child.to"
-                class="ml-2"
-                :prepend-icon="child.icon"
-                :title="child.title"
-              />
+              <!-- Same prefetch wrapper as the outer div: cookbooks grouped by household render
+                   HERE as children, and Vuetify doesn't forward pointer listeners to a
+                   v-list-item's root element, so the div is the event target. -->
+              <template v-for="child in nav.children" :key="child.key || child.title">
+                <div
+                  @pointerenter="onNavHoverStart(child.to)"
+                  @pointerleave="onNavHoverEnd(child.to)"
+                  @touchstart.passive="onNavTouch(child.to)"
+                >
+                  <v-list-item
+                    exact
+                    :to="child.to"
+                    class="ml-2"
+                    :prepend-icon="child.icon"
+                    :title="child.title"
+                  />
+                </div>
+              </template>
             </v-list-group>
 
             <!-- Single Item -->
@@ -166,6 +186,7 @@ import AnnouncementDialog from "~/components/Domain/Announcement/AnnouncementDia
 import UserAvatar from "~/components/Domain/User/UserAvatar.vue";
 import { useToggleDarkMode } from "~/composables/use-utils";
 import { useAnnouncements } from "~/composables/use-announcements";
+import { useCookbookPrefetch } from "~/composables/recipes/use-list-prefetch";
 
 const props = defineProps({
   user: {
@@ -207,6 +228,36 @@ const state = reactive({
 });
 
 const allLinks = computed(() => [...props.topLink, ...(props.secondaryLinks || [])]);
+
+// Prefetch for cookbook links only — everything else in the sidebar is left alone. The slug is
+// parsed from the nav target so the sidebar needs no knowledge of how nav items are built.
+const { hoverStart, hoverEnd, touchStart } = useCookbookPrefetch();
+
+function cookbookSlugFromNav(to?: string): string | null {
+  const slug = typeof to === "string" ? to.split("/cookbooks/")[1] : undefined;
+  return slug ? slug.replace(/\/+$/, "") : null;
+}
+
+function onNavHoverStart(to?: string) {
+  const slug = cookbookSlugFromNav(to);
+  if (slug) {
+    hoverStart(slug);
+  }
+}
+
+function onNavHoverEnd(to?: string) {
+  const slug = cookbookSlugFromNav(to);
+  if (slug) {
+    hoverEnd(slug);
+  }
+}
+
+function onNavTouch(to?: string) {
+  const slug = cookbookSlugFromNav(to);
+  if (slug) {
+    touchStart(slug);
+  }
+}
 function initDropdowns() {
   allLinks.value.forEach((link) => {
     state.dropDowns[link.title] = link.childrenStartExpanded || false;

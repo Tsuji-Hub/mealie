@@ -14,6 +14,8 @@
       :size="small ? 'small' : 'default'"
       :style="{ '--tc': tagHue(category.name) }"
       @click.prevent="() => $emit('item-selected', category, urlPrefix)"
+      @pointerenter="() => $emit('item-hovered', category, urlPrefix)"
+      @touchstart.passive="() => $emit('item-hovered', category, urlPrefix)"
     >
       <span class="fork-tag__dot" />
       {{ truncateText(category.name) }}
@@ -47,7 +49,8 @@ const props = withDefaults(defineProps<Props>(), {
   maxWidth: null,
 });
 
-defineEmits(["item-selected"]);
+// item-hovered exists so a parent can warm the SWR cache before the click; ignoring it is fine.
+defineEmits(["item-selected", "item-hovered"]);
 function truncateText(text: string, length = 20, clamp = "...") {
   if (!props.truncate) return text;
   return truncatePlainText(text, length, clamp);

@@ -7,12 +7,14 @@
         :items="recipe.recipeCategory"
         url-prefix="categories"
         @item-selected="chipClicked"
+        @item-hovered="chipHovered"
       />
       <RecipeChips
         small
         :items="recipe.tags"
         url-prefix="tags"
         @item-selected="chipClicked"
+        @item-hovered="chipHovered"
       />
     </div>
 
@@ -24,7 +26,8 @@
 
 <script setup lang="ts">
 import RecipeChips from "~/components/Domain/Recipe/RecipeChips.vue";
-import { organizerRoute } from "~/composables/cookbooks/use-cookbook-scope";
+import { cookbookForCategory, organizerRoute } from "~/composables/cookbooks/use-cookbook-scope";
+import { useCookbookPrefetch } from "~/composables/recipes/use-list-prefetch";
 import { usePageState } from "~/composables/recipe-page/shared-state";
 import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
@@ -60,5 +63,19 @@ function chipClicked(item: RecipeCategory | RecipeTag | RecipeTool, urlPrefix?: 
     return;
   }
   router.push(organizerRoute(groupSlug.value, item, urlPrefix ?? "categories", cookbooks.value));
+}
+
+// Hovering (or touching) a pill warms the cookbook it routes to, so the click that follows
+// paints cached cards. Same resolution as the click — cookbookForCategory — so the pill can
+// only ever warm the page it would actually open.
+const { hoverStart } = useCookbookPrefetch();
+function chipHovered(item: RecipeCategory | RecipeTag | RecipeTool, urlPrefix?: string) {
+  if (urlPrefix && urlPrefix !== "categories") {
+    return;
+  }
+  const cookbook = cookbookForCategory(cookbooks.value, item as RecipeCategory);
+  if (cookbook?.slug) {
+    hoverStart(cookbook.slug);
+  }
 }
 </script>

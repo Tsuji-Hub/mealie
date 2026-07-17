@@ -76,7 +76,7 @@
               :class="$vuetify.display.mdAndUp ? 'border-e-thin' : null"
             >
               <RecipePageIngredientToolsView v-if="!isEditForm" :recipe="recipe" :scale="scale" class="pr-2" />
-              <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" />
+              <RecipePageOrganizers v-if="$vuetify.display.mdAndUp" v-model="recipe" class="pr-2" @item-selected="chipClicked" @item-hovered="chipHovered" />
             </v-col>
             <!--
               the right column is always rendered, but it's layout width is determined by where the left column is
@@ -220,8 +220,9 @@ import RecipeDialogBulkAdd from "~/components/Domain/Recipe/RecipeDialogBulkAdd.
 import RecipeNotes from "~/components/Domain/Recipe/RecipeNotes.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useNavigationWarning } from "~/composables/use-navigation-warning";
-import { organizerRoute } from "~/composables/cookbooks/use-cookbook-scope";
+import { cookbookForCategory, organizerRoute } from "~/composables/cookbooks/use-cookbook-scope";
 import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
+import { useCookbookPrefetch } from "~/composables/recipes/use-list-prefetch";
 
 const recipe = defineModel<NoUndefinedField<Recipe>>({ required: true });
 
@@ -452,6 +453,18 @@ function chipClicked(item: RecipeTag | RecipeCategory | RecipeTool, itemType: st
     return;
   }
   router.push(organizerRoute(groupSlug.value, item, itemType, cookbooksForChips.value));
+}
+
+// Hover intent on an organizer chip warms the cookbook it routes to (see RecipePageHeroText).
+const { hoverStart: prefetchCookbookOnHover } = useCookbookPrefetch();
+function chipHovered(item: RecipeTag | RecipeCategory | RecipeTool, itemType?: string) {
+  if (itemType && itemType !== "categories") {
+    return;
+  }
+  const cookbook = cookbookForCategory(cookbooksForChips.value, item as RecipeCategory);
+  if (cookbook?.slug) {
+    prefetchCookbookOnHover(cookbook.slug);
+  }
 }
 
 const scale = ref(1);
