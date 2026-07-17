@@ -105,7 +105,11 @@
         @toggle-dense-view="toggleMobileCards()"
       />
     </v-row>
-    <div v-if="recipes && ready">
+    <!-- Skeletons while the first page of recipes is in flight. Painting SOMETHING immediately
+         is the whole fix for the blank-then-pop: the grid used to render nothing until
+         `ready`, so every navigation showed a black content area for the full fetch. -->
+    <RecipeCardSkeletonGrid v-if="!ready || (loading && recipes.length === 0)" />
+    <div v-else-if="recipes && ready">
       <div class="mt-2">
         <v-row v-if="!useMobileCards">
           <v-col
@@ -160,9 +164,11 @@
       </div>
       <v-card v-intersect="infiniteScroll" variant="flat" />
     </div>
+    <!-- Spinner only over real cards (sorting, loading more). On first load the skeletons are
+         the loading state; stacking a spinner on them is noise. -->
     <v-fade-transition>
       <AppLoader
-        v-if="loading"
+        v-if="loading && ready && recipes.length > 0"
         :loading="loading"
       />
     </v-fade-transition>
@@ -173,6 +179,7 @@
 <script setup lang="ts">
 import { useThrottleFn } from "@vueuse/core";
 import RecipeCard from "./RecipeCard.vue";
+import RecipeCardSkeletonGrid from "./RecipeCardSkeletonGrid.vue";
 import RecipeCardMobile from "./RecipeCardMobile.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useLazyRecipes } from "~/composables/recipes";

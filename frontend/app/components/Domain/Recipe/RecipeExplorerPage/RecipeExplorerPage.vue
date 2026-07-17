@@ -21,6 +21,10 @@
         @replace-recipes="replaceRecipes"
         @append-recipes="appendRecipes"
       />
+      <!-- The gate above stays (mounting the section before the search query is initialized
+           would fire a throwaway fetch), but waiting must not mean a blank page: skeletons
+           hold the layout until the section mounts and takes over with its own. -->
+      <RecipeCardSkeletonGrid v-else class="mt-n5" />
     </v-container>
   </v-container>
 </template>
@@ -29,6 +33,7 @@
 import RecipeExplorerPageSearch from "./RecipeExplorerPageParts/RecipeExplorerPageSearch.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import RecipeCardSection from "~/components/Domain/Recipe/RecipeCardSection.vue";
+import RecipeCardSkeletonGrid from "~/components/Domain/Recipe/RecipeCardSkeletonGrid.vue";
 import { useLazyRecipes } from "~/composables/recipes";
 
 const auth = useMealieAuth();

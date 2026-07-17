@@ -21,10 +21,12 @@
       </v-card-text>
     </BaseDialog>
 
-    <v-container
-      v-if="book"
-      class="my-0"
-    >
+    <!-- NOT gated on `book`. It used to be, and the cost was double: nothing painted until the
+         cookbook XHR resolved (a black content area on every sidebar click), and
+         RecipeCardSection wasn't mounted until then either, so the recipes fetch queued BEHIND
+         the cookbook fetch. Its query only needs the route slug, so both requests now run in
+         parallel and the page paints before either lands. -->
+    <v-container class="my-0">
       <v-sheet
         color="transparent"
         class="d-flex flex-column w-100 pa-0 ma-0"
@@ -35,7 +37,8 @@
             <v-icon size="large" class="mr-3">
               {{ $globals.icons.pages }}
             </v-icon>
-            {{ book.name }}
+            <span v-if="book">{{ book.name }}</span>
+            <span v-else class="fork-title-skel" aria-hidden="true" />
           </v-toolbar-title>
           <BaseButton
             v-if="canEdit"
@@ -44,7 +47,7 @@
             @click="handleEditCookbook"
           />
         </div>
-        <div v-if="book.description" class="subtitle-1 text-grey-lighten-1 mb-2">
+        <div v-if="book?.description" class="subtitle-1 text-grey-lighten-1 mb-2">
           {{ book.description }}
         </div>
       </v-sheet>
@@ -143,3 +146,38 @@ useSeoMeta({
   title: book?.value?.name || "Cookbook",
 });
 </script>
+
+<style lang="scss" scoped>
+/* Placeholder for the cookbook name while its fetch is in flight — same shimmer as the card
+   skeletons, sized to a typical one-word title so the header doesn't jump when the name lands. */
+.fork-title-skel {
+  display: inline-block;
+  width: 130px;
+  height: 22px;
+  border-radius: 8px;
+  vertical-align: middle;
+  background: linear-gradient(
+    100deg,
+    var(--fork-hair) 40%,
+    color-mix(in srgb, var(--fork-hair) 45%, transparent) 50%,
+    var(--fork-hair) 60%
+  );
+  background-size: 200% 100%;
+  animation: fork-skel-shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes fork-skel-shimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fork-title-skel {
+    animation: none;
+  }
+}
+</style>
