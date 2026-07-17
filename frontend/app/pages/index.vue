@@ -5,7 +5,6 @@
 <script setup lang="ts">
 import useDefaultActivity from "~/composables/use-default-activity";
 import { useUserActivityPreferences } from "~/composables/use-users/preferences";
-import { useAsyncKey } from "~/composables/use-utils";
 import type { AppInfo, AppStartupInfo } from "~/lib/api/types/admin";
 
 definePageMeta({
@@ -29,7 +28,8 @@ async function redirectPublicUserToDefaultGroup() {
   }
 }
 
-useAsyncData(useAsyncKey(), async () => {
+// Plain async run — the old useAsyncData(useAsyncKey()) leaked a payload entry per visit.
+(async () => {
   if (groupSlug.value) {
     const data = await $axios.get<AppStartupInfo>("/api/app/about/startup-info");
     const isDemo = data.data.isDemo;
@@ -51,5 +51,5 @@ useAsyncData(useAsyncKey(), async () => {
   else {
     redirectPublicUserToDefaultGroup();
   }
-});
+})();
 </script>

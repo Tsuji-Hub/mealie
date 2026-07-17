@@ -128,7 +128,6 @@
 <script setup lang="ts">
 import type { ShoppingListOut } from "~/lib/api/types/household";
 import { useUserApi } from "~/composables/api";
-import { useAsyncKey } from "~/composables/use-utils";
 import { useShoppingListPreferences } from "~/composables/use-users/preferences";
 import type { UserOut } from "~/lib/api/types/user";
 
@@ -155,9 +154,11 @@ const state = reactive({
   ownerTarget: ref<ShoppingListOut | null>(null),
 });
 
-const { data: shoppingLists } = useAsyncData(useAsyncKey(), async () => {
-  return await fetchShoppingLists();
-});
+// Plain fetch into a ref — useAsyncData under a random key leaked a payload entry per visit.
+const shoppingLists = ref<Awaited<ReturnType<typeof fetchShoppingLists>> | null>(null);
+(async () => {
+  shoppingLists.value = await fetchShoppingLists();
+})();
 
 const shoppingListChoices = computed(() => {
   if (!shoppingLists.value) {

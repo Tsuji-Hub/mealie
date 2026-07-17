@@ -1,4 +1,3 @@
-import { useAsyncKey } from "./use-utils";
 import { useUserApi } from "~/composables/api";
 import type { ReadWebhook } from "~/lib/api/types/household";
 
@@ -10,18 +9,15 @@ export const useGroupWebhooks = function () {
   const actions = {
     getAll() {
       loading.value = true;
-      const { data: units } = useAsyncData(useAsyncKey(), async () => {
+      // Plain fetch into a ref — useAsyncData under a random key registered a permanent,
+      // unreachable payload entry per call (the leak class removed with useAsyncKey).
+      const units = ref<ReadWebhook[] | null>(null);
+      (async () => {
         const { data } = await api.groupWebhooks.getAll();
+        units.value = data ? data.items : null;
+        loading.value = false;
+      })();
 
-        if (data) {
-          return data.items;
-        }
-        else {
-          return null;
-        }
-      });
-
-      loading.value = false;
       return units;
     },
     async refreshAll() {

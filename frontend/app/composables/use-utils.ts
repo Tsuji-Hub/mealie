@@ -8,9 +8,11 @@ export const useToggleDarkMode = () => {
   return () => toggleDark();
 };
 
-export const useAsyncKey = function () {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-};
+// useAsyncKey() used to live here: a RANDOM useAsyncData key per call. Nuxt keeps every
+// asyncData entry for the life of the tab, and a key nothing can reuse is a permanent leak —
+// one retained payload per page visit, which is what froze long browsing sessions. Deleted
+// rather than deprecated so the pattern cannot be reintroduced: give useAsyncData a stable
+// semantic key, or (ssr is false here) just fetch into a ref.
 
 export const titleCase = function (str: string) {
   return str

@@ -215,7 +215,6 @@ import { useDark, useSessionStorage, whenever } from "@vueuse/core";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { usePasswordField } from "~/composables/use-passwords";
 import { alert } from "~/composables/use-toast";
-import { useAsyncKey } from "~/composables/use-utils";
 import type { AppStartupInfo } from "~/lib/api/types/admin";
 import { useUserActivityPreferences } from "~/composables/use-users/preferences";
 
@@ -249,7 +248,8 @@ const form = reactive({
   remember: false,
 });
 
-useAsyncData(useAsyncKey(), async () => {
+// Plain async run — the old useAsyncData(useAsyncKey()) leaked a payload entry per visit.
+(async () => {
   const data = await $axios.get<AppStartupInfo>("/api/app/about/startup-info");
   isDemo.value = data.data.isDemo;
   isFirstLogin.value = data.data.isFirstLogin;
@@ -258,7 +258,7 @@ useAsyncData(useAsyncKey(), async () => {
     form.email = "changeme@example.com";
     form.password = "MyPassword";
   }
-});
+})();
 
 whenever(
   () => loggedIn.value && groupSlug.value,

@@ -233,7 +233,6 @@
 import type { TranslateResult } from "vue-i18n";
 import { useAdminApi, useUserApi } from "~/composables/api";
 import { validators } from "~/composables/use-validators";
-import { useAsyncKey } from "~/composables/use-utils";
 import type { CheckAppConfig } from "~/lib/api/types/admin";
 import AppLoader from "~/components/global/AppLoader.vue";
 
@@ -386,8 +385,17 @@ const rawAppInfo = ref({
   version: "null",
   versionLatest: "null",
 });
+interface AppInfoRow {
+  slot?: string;
+  name: string;
+  icon: string;
+  value?: unknown;
+}
+
 function getAppInfo() {
-  const { data: statistics } = useAsyncData(useAsyncKey(), async () => {
+  // Plain fetch into a ref — useAsyncData under a random key leaked a payload entry per visit.
+  const statistics = ref<AppInfoRow[] | null>(null);
+  (async () => {
     const { data } = await adminApi.about.about();
     if (data) {
       rawAppInfo.value.version = data.version;
@@ -452,10 +460,9 @@ function getAppInfo() {
           value: data.recipeScraperVersion,
         },
       ];
-      return prettyInfo;
+      statistics.value = prettyInfo;
     }
-    return data;
-  });
+  })();
   return statistics;
 }
 const appInfo = getAppInfo();

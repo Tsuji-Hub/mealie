@@ -1,7 +1,6 @@
 import { format } from "date-fns";
-import { useAsyncKey } from "./use-utils";
 import { useUserApi } from "~/composables/api";
-import type { CreatePlanEntry, PlanEntryType, UpdatePlanEntry } from "~/lib/api/types/meal-plan";
+import type { CreatePlanEntry, PlanEntryType, ReadPlanEntry, UpdatePlanEntry } from "~/lib/api/types/meal-plan";
 
 type PlanOption = {
   text: string;
@@ -38,22 +37,19 @@ export const useMealplans = function (range: Ref<DateRange>) {
   const actions = {
     getAll() {
       loading.value = true;
-      const { data: units } = useAsyncData(useAsyncKey(), async () => {
+      // Plain fetch into a ref — useAsyncData under a random key registered a permanent,
+      // unreachable payload entry per call (the leak class removed with useAsyncKey).
+      const units = ref<ReadPlanEntry[] | null>(null);
+      (async () => {
         const query = {
           start_date: format(range.value.start, "yyyy-MM-dd"),
           end_date: format(range.value.end, "yyyy-MM-dd"),
         };
         const { data } = await api.mealplans.getAll(1, -1, { start_date: query.start_date, end_date: query.end_date });
+        units.value = data ? data.items : null;
+        loading.value = false;
+      })();
 
-        if (data) {
-          return data.items;
-        }
-        else {
-          return null;
-        }
-      });
-
-      loading.value = false;
       return units;
     },
     async refreshAll() {

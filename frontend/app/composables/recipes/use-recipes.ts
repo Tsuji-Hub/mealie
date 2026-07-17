@@ -1,5 +1,4 @@
 import { ref } from "vue";
-import { useAsyncKey } from "../use-utils";
 import { usePublicExploreApi } from "~/composables/api/api-client";
 import { useUserApi } from "~/composables/api";
 import type { OrderByNullPosition, Recipe } from "~/lib/api/types/recipe";
@@ -149,9 +148,9 @@ export const useRecipes = (
   }
 
   function getAllRecipes() {
-    useAsyncData(useAsyncKey(), async () => {
-      await refreshRecipes();
-    });
+    // Fire-and-forget refresh. The old useAsyncData(useAsyncKey()) wrapper ignored its own
+    // return value AND leaked a permanent payload entry per call.
+    refreshRecipes();
   }
 
   function assignSorted(val: Array<Recipe>) {

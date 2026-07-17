@@ -107,11 +107,10 @@
 </template>
 
 <script setup lang="ts">
-import { useThrottleFn, whenever } from "@vueuse/core";
+import { useEventListener, useThrottleFn, whenever } from "@vueuse/core";
 import RecipeTimelineItem from "./RecipeTimelineItem.vue";
 import { useTimelinePreferences } from "~/composables/use-users/preferences";
 import { useTimelineEventTypes } from "~/composables/recipes/use-recipe-timeline-events";
-import { useAsyncKey } from "~/composables/use-utils";
 import { alert } from "~/composables/use-toast";
 import { useUserApi } from "~/composables/api";
 import type { Recipe, RecipeTimelineEventOut, RecipeTimelineEventUpdate, TimelineEventType } from "~/lib/api/types/recipe";
@@ -280,41 +279,42 @@ async function initializeTimelineEvents() {
   loading.value = false;
 }
 
-const infiniteScroll = useThrottleFn(() => {
-  useAsyncData(useAsyncKey(), async () => {
-    if (!hasMore.value || loading.value) {
-      return;
-    }
+// Plain async fn — the old useAsyncData(useAsyncKey()) wrapper registered a PERMANENT entry in
+// Nuxt's payload registry per scroll-triggered page, from a random key nothing could ever reuse.
+const infiniteScroll = useThrottleFn(async () => {
+  if (!hasMore.value || loading.value) {
+    return;
+  }
 
-    loading.value = true;
-    await scrollTimelineEvents();
-    loading.value = false;
-  });
+  loading.value = true;
+  await scrollTimelineEvents();
+  loading.value = false;
 }, 500);
 
 // preload events
 initializeTimelineEvents();
 
-onMounted(
-  () => {
-    document.onscroll = () => {
-      // if the inner element is scrollable, let its scroll event handle the infiniteScroll
-      const timelineContainerElement = document.getElementById("timeline-container");
-      if (timelineContainerElement) {
-        const { clientHeight, scrollHeight } = timelineContainerElement;
+// useEventListener, NOT `document.onscroll = ...`: the property assignment had no cleanup, so
+// `document` pinned this component's whole setup scope (recipes Map, events, api client) for
+// the rest of the session after the first timeline view — and kept firing on every scroll
+// anywhere in the app, able to re-fetch from a component that no longer existed. VueUse
+// removes the listener on unmount automatically.
+useEventListener(document, "scroll", () => {
+  // if the inner element is scrollable, let its scroll event handle the infiniteScroll
+  const timelineContainerElement = document.getElementById("timeline-container");
+  if (timelineContainerElement) {
+    const { clientHeight, scrollHeight } = timelineContainerElement;
 
-        // if scrollHeight == clientHeight, the element is not scrollable, so we need to look at the global position
-        // if scrollHeight > clientHeight, it is scrollable and we don't need to do anything here
-        if (scrollHeight > clientHeight) {
-          return;
-        }
-      }
+    // if scrollHeight == clientHeight, the element is not scrollable, so we need to look at the global position
+    // if scrollHeight > clientHeight, it is scrollable and we don't need to do anything here
+    if (scrollHeight > clientHeight) {
+      return;
+    }
+  }
 
-      const bottomOfWindow = document.documentElement.scrollTop + window.innerHeight >= document.documentElement.offsetHeight - (window.innerHeight * screenBuffer);
-      if (bottomOfWindow) {
-        infiniteScroll();
-      }
-    };
-  },
-);
+  const bottomOfWindow = document.documentElement.scrollTop + window.innerHeight >= document.documentElement.offsetHeight - (window.innerHeight * screenBuffer);
+  if (bottomOfWindow) {
+    infiniteScroll();
+  }
+}, { passive: true });
 </script>

@@ -278,7 +278,6 @@
 import UserProfileLinkCard from "@/components/Domain/User/UserProfileLinkCard.vue";
 import { useUserApi } from "~/composables/api";
 import UserAvatar from "@/components/Domain/User/UserAvatar.vue";
-import { useAsyncKey } from "~/composables/use-utils";
 import StatsCards from "~/components/global/StatsCards.vue";
 import type { UserOut } from "~/lib/api/types/user";
 import UserInviteDialog from "~/components/Domain/User/UserInviteDialog.vue";
@@ -314,13 +313,14 @@ const user = computed<UserOut | null>(() => {
 const inviteDialog = ref(false);
 const api = useUserApi();
 
-const { data: stats } = useAsyncData(useAsyncKey(), async () => {
+// Plain fetch into a ref — useAsyncData under a random key leaked a payload entry per visit.
+const stats = ref<Awaited<ReturnType<typeof api.households.statistics>>["data"]>(null);
+(async () => {
   const { data } = await api.households.statistics();
-
   if (data) {
-    return data;
+    stats.value = data;
   }
-});
+})();
 
 const statsText: { [key: string]: string } = {
   totalRecipes: i18n.t("general.recipes"),

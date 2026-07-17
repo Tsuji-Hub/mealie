@@ -184,7 +184,6 @@
 
 <script setup lang="ts">
 import { useUserApi } from "~/composables/api";
-import { useAsyncKey } from "~/composables/use-utils";
 import type { GroupEventNotifierCreate, GroupEventNotifierOut } from "~/lib/api/types/household";
 
 interface OptionKey {
@@ -215,10 +214,12 @@ const state = reactive({
   deleteTargetId: "",
 });
 
-const { data: notifiers } = useAsyncData(useAsyncKey(), async () => {
+// Plain fetch into a ref — useAsyncData under a random key leaked a payload entry per visit.
+const notifiers = ref<GroupEventNotifierOut[] | null>(null);
+(async () => {
   const { data } = await api.groupEventNotifier.getAll();
-  return data?.items;
-});
+  notifiers.value = data?.items ?? null;
+})();
 
 async function refreshNotifiers() {
   const { data } = await api.groupEventNotifier.getAll();
