@@ -1,5 +1,5 @@
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
-import type { RecipeCategory } from "~/lib/api/types/recipe";
+import type { RecipeCategory, RecipeTag, RecipeTool } from "~/lib/api/types/recipe";
 
 /**
  * Say why we declined. Biasing to "do nothing" is right for the user — wrongly vanishing a
@@ -76,4 +76,47 @@ export function isScopedByCategory(
   }
 
   return true;
+}
+
+/**
+ * The cookbook this category feeds, if there is exactly one answer to give.
+ *
+ * Reuses the vanish predicate on purpose: "which cookbook does this category belong to" and
+ * "does unfiling this category remove the card from this cookbook" must be the same question,
+ * or a pill could route somewhere the vanish logic doesn't recognise. In this fork every
+ * category has a 1:1 cookbook by construction, so this normally finds it; a category without
+ * one returns undefined and the caller keeps its fallback. The parsed `queryFilter.parts` this
+ * reads is on the LIST payload (verified against the live API), so the sidebar's already-loaded
+ * store works — no extra fetch.
+ */
+export function cookbookForCategory(
+  cookbooks: ReadCookBook[] | null | undefined,
+  category: RecipeCategory,
+): ReadCookBook | undefined {
+  return (cookbooks || []).find(cookbook => isScopedByCategory(cookbook, category));
+}
+
+/**
+ * Where an organizer chip should navigate.
+ *
+ * A category pill reads as a COOKBOOK tag in this fork (the Categories -> Cookbooks rename),
+ * so clicking it should land on that cookbook's page — the instant route — not on a search
+ * results page titled "Recipes" with a filter chip the user never asked for. Tags and tools
+ * keep the filtered explorer, and so does any category without a matching cookbook: a pill
+ * must never dead-end.
+ */
+export function organizerRoute(
+  groupSlug: string,
+  item: RecipeCategory | RecipeTag | RecipeTool,
+  urlPrefix: string,
+  cookbooks: ReadCookBook[] | null | undefined,
+): string {
+  if (urlPrefix === "categories") {
+    const cookbook = cookbookForCategory(cookbooks, item as RecipeCategory);
+    if (cookbook?.slug) {
+      return `/g/${groupSlug}/cookbooks/${cookbook.slug}`;
+    }
+  }
+
+  return `/g/${groupSlug}?${urlPrefix}=${item.id}`;
 }

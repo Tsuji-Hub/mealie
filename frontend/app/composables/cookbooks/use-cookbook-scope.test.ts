@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { isScopedByCategory } from "./use-cookbook-scope";
+import { cookbookForCategory, isScopedByCategory, organizerRoute } from "./use-cookbook-scope";
 import type { QueryFilterJSONPart, ReadCookBook } from "~/lib/api/types/cookbook";
 import type { RecipeCategory } from "~/lib/api/types/recipe";
 
@@ -120,6 +120,57 @@ describe("isScopedByCategory", () => {
       expect(isScopedByCategory(undefined, category("Dinner"))).toBe(false);
       expect(isScopedByCategory(cookbook(undefined), category("Dinner"))).toBe(false);
       expect(isScopedByCategory(cookbook([]), category("Dinner"))).toBe(false);
+    });
+  });
+
+  describe("cookbookForCategory — the pill's category -> cookbook lookup", () => {
+    const library = [
+      cookbook([namePart(["Breakfast"])], { name: "Breakfast", slug: "breakfast" }),
+      cookbook([namePart(["Dinner"])], { name: "Dinner", slug: "dinner" }),
+      // A cookbook the predicate must refuse: multi-part filters are not category-scoped.
+      cookbook(
+        [namePart(["Dinner"]), { ...namePart(["Salads"]), logicalOperator: "OR" } as QueryFilterJSONPart],
+        { name: "Combined", slug: "combined" },
+      ),
+    ];
+
+    test("finds the cookbook whose filter names the category", () => {
+      expect(cookbookForCategory(library, category("Dinner"))?.slug).toBe("dinner");
+      expect(cookbookForCategory(library, category("Breakfast"))?.slug).toBe("breakfast");
+    });
+
+    test("a category with no cookbook returns undefined, so the caller keeps its fallback", () => {
+      expect(cookbookForCategory(library, category("Uncookbooked"))).toBeUndefined();
+      expect(cookbookForCategory([], category("Dinner"))).toBeUndefined();
+      expect(cookbookForCategory(null, category("Dinner"))).toBeUndefined();
+    });
+  });
+
+  describe("organizerRoute — where a chip click lands", () => {
+    const library = [cookbook([namePart(["Dinner"])], { name: "Dinner", slug: "dinner" })];
+
+    test("a category pill routes to its cookbook page — the instant route", () => {
+      expect(organizerRoute("home", category("Dinner"), "categories", library)).toBe(
+        "/g/home/cookbooks/dinner",
+      );
+    });
+
+    test("a category without a cookbook keeps the filtered explorer — a pill must never dead-end", () => {
+      expect(organizerRoute("home", category("Lonely"), "categories", library)).toBe(
+        "/g/home?categories=cat-id",
+      );
+      expect(organizerRoute("home", category("Dinner"), "categories", [])).toBe(
+        "/g/home?categories=cat-id",
+      );
+    });
+
+    test("tags and tools always take the explorer — only categories are cookbooks in this fork", () => {
+      // A tag named identically to a cookbook's category must NOT hijack the cookbook route.
+      const dinnerTag = { id: "tag-id", name: "Dinner", slug: "dinner" };
+      expect(organizerRoute("home", dinnerTag, "tags", library)).toBe("/g/home?tags=tag-id");
+      expect(organizerRoute("home", { id: "tool-id", name: "Dinner" }, "tools", library)).toBe(
+        "/g/home?tools=tool-id",
+      );
     });
   });
 });

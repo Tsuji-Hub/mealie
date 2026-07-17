@@ -220,6 +220,8 @@ import RecipeDialogBulkAdd from "~/components/Domain/Recipe/RecipeDialogBulkAdd.
 import RecipeNotes from "~/components/Domain/Recipe/RecipeNotes.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 import { useNavigationWarning } from "~/composables/use-navigation-warning";
+import { organizerRoute } from "~/composables/cookbooks/use-cookbook-scope";
+import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
 
 const recipe = defineModel<NoUndefinedField<Recipe>>({ required: true });
 
@@ -439,11 +441,17 @@ function addStep(steps: Array<string> | null = null) {
  * RecipeChip Clicked
  */
 
+// Same routing as the hero pills: a category chip goes to its cookbook page (instant), tags and
+// unmatched categories keep the filtered explorer. The store is already hydrated by the sidebar.
+const { store: cookbooksForChips } = isOwnGroup.value
+  ? useCookbookStore()
+  : usePublicCookbookStore(groupSlug.value);
+
 function chipClicked(item: RecipeTag | RecipeCategory | RecipeTool, itemType: string) {
   if (!item.id) {
     return;
   }
-  router.push(`/g/${groupSlug.value}?${itemType}=${item.id}`);
+  router.push(organizerRoute(groupSlug.value, item, itemType, cookbooksForChips.value));
 }
 
 const scale = ref(1);
