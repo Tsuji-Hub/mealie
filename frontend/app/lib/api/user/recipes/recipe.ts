@@ -24,6 +24,7 @@ import type {
   ApiRequestInstance,
   NutritionEstimate,
   PaginationData,
+  RecipeFacets,
   RequestResponse,
 } from "~/lib/api/types/non-generated";
 import { SSEDataEventStatus } from "~/lib/api/types/non-generated";
@@ -139,6 +140,12 @@ export class RecipeAPI extends BaseCRUDAPI<CreateRecipe, Recipe, Recipe> {
 
   async search(rsq: RecipeSearchQuery) {
     return await this.requests.get<PaginationData<Recipe>>(route(routes.recipesBase, rsq));
+  }
+
+  /** Organisers present in the recipe set these filters select, with counts. Same params as
+   * the list route, so the caller passes its existing filter state through unchanged. */
+  async getFacets(rsq: RecipeSearchQuery) {
+    return await this.requests.get<RecipeFacets>(route(`${routes.recipesBase}/facets`, rsq));
   }
 
   async getAllByCategory(categories: string[]) {

@@ -6,11 +6,13 @@ from pydantic import UUID4
 
 from mealie.routes._base import controller
 from mealie.routes._base.base_controllers import BasePublicHouseholdExploreController
+from mealie.routes.recipe.facets import resolve_cookbook_match_attr
 from mealie.routes.recipe.recipe_crud_routes import JSONBytes
 from mealie.schema.cookbook.cookbook import ReadCookBook
 from mealie.schema.make_dependable import make_dependable
 from mealie.schema.recipe import Recipe
 from mealie.schema.recipe.recipe import RecipeSummary
+from mealie.schema.recipe.recipe_facets import RecipeFacets
 from mealie.schema.recipe.recipe_suggestion import RecipeSuggestionQuery, RecipeSuggestionResponse
 from mealie.schema.response.pagination import PaginationBase, PaginationQuery, RecipeSearchQuery
 
@@ -110,6 +112,49 @@ class PublicRecipesController(BasePublicHouseholdExploreController):
 
         # Response is returned directly, to avoid validation and improve performance
         return JSONBytes(content=json_compatible_response)
+
+    @router.get("/facets", response_model=RecipeFacets)
+    def get_facets(
+        self,
+        search_query: RecipeSearchQuery = Depends(make_dependable(RecipeSearchQuery)),
+        categories: list[UUID4 | str] | None = Query(None),
+        tags: list[UUID4 | str] | None = Query(None),
+        tools: list[UUID4 | str] | None = Query(None),
+        foods: list[UUID4 | str] | None = Query(None),
+        households: list[UUID4 | str] | None = Query(None),
+    ) -> RecipeFacets:
+        """Same facets as the authed route, constrained by the SAME public-visibility filter the
+        public list route applies — facets must not leak the organisers of private recipes.
+        Declared before /{recipe_slug}, which would otherwise swallow the path."""
+        cookbook_data: ReadCookBook | None = None
+        if search_query.cookbook:
+            cookbook_data = self.cross_household_cookbooks.get_one(
+                search_query.cookbook, resolve_cookbook_match_attr(search_query.cookbook)
+            )
+            if cookbook_data is None or not cookbook_data.public:
+                raise HTTPException(404, "cookbook not found")
+
+        public_filter = "(household.preferences.privateHousehold = FALSE AND settings.public = TRUE)"
+
+        # Degrade, don't 500: on failure the client falls back to the full organiser lists.
+        try:
+            return self.cross_household_recipes.facet_counts(
+                query_filter=public_filter,
+                cookbook=cookbook_data,
+                categories=categories,
+                tags=tags,
+                tools=tools,
+                foods=foods,
+                households=households,
+                require_all_categories=search_query.require_all_categories,
+                require_all_tags=search_query.require_all_tags,
+                require_all_tools=search_query.require_all_tools,
+                require_all_foods=search_query.require_all_foods,
+                search=search_query.search,
+            )
+        except Exception:
+            self.logger.exception("Public facet computation failed; returning ok=False so the client falls back")
+            return RecipeFacets(ok=False)
 
     @router.get("/{recipe_slug}", response_model=Recipe)
     def get_recipe(self, recipe_slug: str) -> Recipe:

@@ -6,10 +6,10 @@
        categories admin page, where a category genuinely is a category. Renaming its value
        would put "Cookbooks" inside the cookbook editor. -->
   <SearchFilter
-    v-if="categories"
+    v-if="categoryOptions"
     v-model="selectedCategories"
     v-model:require-all="state.requireAllCategories"
-    :items="categories"
+    :items="categoryOptions"
   >
     <v-icon start>
       {{ $globals.icons.categories }}
@@ -19,10 +19,10 @@
 
   <!-- Tag Filter -->
   <SearchFilter
-    v-if="tags"
+    v-if="tagOptions"
     v-model="selectedTags"
     v-model:require-all="state.requireAllTags"
-    :items="tags"
+    :items="tagOptions"
   >
     <v-icon start>
       {{ $globals.icons.tags }}
@@ -32,10 +32,10 @@
 
   <!-- Tool Filter -->
   <SearchFilter
-    v-if="tools"
+    v-if="toolOptions"
     v-model="selectedTools"
     v-model:require-all="state.requireAllTools"
-    :items="tools"
+    :items="toolOptions"
   >
     <v-icon start>
       {{ $globals.icons.potSteam }}
@@ -87,6 +87,11 @@ import {
   useToolStore,
   usePublicToolStore,
 } from "~/composables/store";
+import { watchDebounced } from "@vueuse/core";
+import { useUserApi } from "~/composables/api";
+import { usePublicExploreApi } from "~/composables/api/api-client";
+import { facetOptions, facetQueryOf } from "~/composables/recipes/use-facets";
+import type { RecipeFacets } from "~/lib/api/types/non-generated";
 
 const auth = useMealieAuth();
 const route = useRoute();
@@ -101,8 +106,11 @@ const {
   selectedHouseholds,
   selectedTags,
   selectedTools,
+  passedQueryWithSeed,
 } = useRecipeExplorerSearch(groupSlug);
 
+// The global stores are now the FALLBACK, not the source: bound directly, they offered every
+// organiser in the group unconditionally — dessert-only tags inside the Dinner scope.
 const { store: categories } = isOwnGroup.value ? useCategoryStore() : usePublicCategoryStore(groupSlug.value);
 const { store: tags } = isOwnGroup.value ? useTagStore() : usePublicTagStore(groupSlug.value);
 const { store: tools } = isOwnGroup.value ? useToolStore() : usePublicToolStore(groupSlug.value);
@@ -112,6 +120,42 @@ const { store: foods, actions: foodActions } = isOwnGroup.value
   ? useFoodStore(undefined, { lazy: true })
   : usePublicFoodStore(groupSlug.value, undefined, { lazy: true });
 const { store: households } = isOwnGroup.value ? useHouseholdStore() : usePublicHouseholdStore(groupSlug.value);
+
+// ---- Facets: only offer an option if choosing it would return something ------------------
+const api = useUserApi();
+const publicApi = isOwnGroup.value ? null : usePublicExploreApi(groupSlug.value).explore;
+
+const facets = ref<RecipeFacets | null>(null);
+
+// Set-membership params only: the random seed and ordering change nothing about WHICH recipes
+// are in scope, and refetching on every reshuffle would be noise.
+const facetQuery = computed(() => facetQueryOf(passedQueryWithSeed.value));
+
+async function fetchFacets() {
+  try {
+    const { data, error } = publicApi
+      ? await publicApi.recipes.getFacets(facetQuery.value)
+      : await api.recipes.getFacets(facetQuery.value);
+    facets.value = error ? null : data;
+  }
+  catch {
+    // Degrade, never break the page: null routes every selector to its global-store fallback.
+    facets.value = null;
+  }
+}
+
+// Debounced: the search box types fast, and every keystroke changes the query.
+watchDebounced(facetQuery, fetchFacets, { debounce: 300, deep: true, immediate: true });
+
+const tagOptions = computed(() =>
+  facetOptions(facets.value?.tags, facets.value?.ok ?? false, selectedTags.value, tags.value),
+);
+const categoryOptions = computed(() =>
+  facetOptions(facets.value?.categories, facets.value?.ok ?? false, selectedCategories.value, categories.value),
+);
+const toolOptions = computed(() =>
+  facetOptions(facets.value?.tools, facets.value?.ok ?? false, selectedTools.value, tools.value),
+);
 
 watch(
   households,

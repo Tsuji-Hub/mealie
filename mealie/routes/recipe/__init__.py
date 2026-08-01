@@ -1,6 +1,15 @@
 from fastapi import APIRouter
 
-from . import bulk_actions, comments, exports, nutrition_estimate, recipe_crud_routes, shared_routes, timeline_events
+from . import (
+    bulk_actions,
+    comments,
+    exports,
+    facets,
+    nutrition_estimate,
+    recipe_crud_routes,
+    shared_routes,
+    timeline_events,
+)
 
 prefix = "/recipes"
 
@@ -8,6 +17,8 @@ router = APIRouter()
 
 router.include_router(exports.router, tags=["Recipe: Exports"])
 router.include_router(nutrition_estimate.router, tags=["Recipe: Nutrition"])
+# Before CRUD: /recipes/{slug} would otherwise swallow /recipes/facets.
+router.include_router(facets.router, tags=["Recipe: Facets"])
 router.include_router(recipe_crud_routes.router, tags=["Recipe: CRUD"])
 router.include_router(comments.router, prefix=prefix, tags=["Recipe: Comments"])
 router.include_router(bulk_actions.router, prefix=prefix, tags=["Recipe: Bulk Actions"])

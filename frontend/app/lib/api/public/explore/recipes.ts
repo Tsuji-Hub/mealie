@@ -1,7 +1,7 @@
 import { BaseCRUDAPIReadOnly } from "~/lib/api/base/base-clients";
 import { route } from "../../base";
 import { Recipe, RecipeSuggestionQuery, RecipeSuggestionResponse } from "~/lib/api/types/recipe";
-import { ApiRequestInstance, PaginationData } from "~/lib/api/types/non-generated";
+import { ApiRequestInstance, PaginationData, RecipeFacets } from "~/lib/api/types/non-generated";
 import { RecipeSearchQuery } from "../../user/recipes/recipe";
 
 const prefix = "/api";
@@ -29,5 +29,11 @@ export class PublicRecipeApi extends BaseCRUDAPIReadOnly<Recipe> {
     return await this.requests.get<RecipeSuggestionResponse>(
       route(`${routes.recipesGroupSlug(this.groupSlug)}/suggestions`, { ...q, foods, tools })
     );
+  }
+
+  /** Organisers present in the recipe set these filters select, with counts. Same params as
+   * the list route, constrained server-side by the public-visibility filter. */
+  async getFacets(rsq: RecipeSearchQuery) {
+    return await this.requests.get<RecipeFacets>(route(`${routes.recipesGroupSlug(this.groupSlug)}/facets`, rsq));
   }
 }

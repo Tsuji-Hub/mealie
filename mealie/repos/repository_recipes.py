@@ -23,6 +23,7 @@ from mealie.db.models.users.users import User
 from mealie.schema.cookbook.cookbook import ReadCookBook
 from mealie.schema.recipe import Recipe
 from mealie.schema.recipe.recipe import RecipePagination, RecipeSummary, create_recipe_slug
+from mealie.schema.recipe.recipe_facets import FacetItem, RecipeFacets
 from mealie.schema.recipe.recipe_ingredient import IngredientFood
 from mealie.schema.recipe.recipe_suggestion import RecipeSuggestionQuery, RecipeSuggestionResponseItem
 from mealie.schema.recipe.recipe_tool import RecipeToolOut
@@ -354,6 +355,86 @@ class RepositoryRecipes(HouseholdRepositoryGeneric[Recipe, RecipeModel]):
             counts[cookbook_id] = row._mapping[label]
 
         return counts
+
+    def facet_counts(
+        self,
+        query_filter: str | None = None,
+        cookbook: ReadCookBook | None = None,
+        categories: list[UUID4 | str] | None = None,
+        tags: list[UUID4 | str] | None = None,
+        tools: list[UUID4 | str] | None = None,
+        foods: list[UUID4 | str] | None = None,
+        households: list[UUID4 | str] | None = None,
+        require_all_categories=True,
+        require_all_tags=True,
+        require_all_tools=True,
+        require_all_foods=True,
+        search: str | None = None,
+    ) -> RecipeFacets:
+        """Fork: the organisers actually present in a filtered recipe set, with counts.
+
+        Same house rule as count_by_cookbooks above: MIRROR page_all's filter construction
+        rather than refactor it — same base query and scoping, same _build_recipe_filter, same
+        QueryFilterBuilder (the only correct interpreter of a filter string), same search hook —
+        so the facets always describe exactly the set the recipe list itself would return.
+        The filtered set becomes one DISTINCT-recipe-id subquery, then each organiser type is a
+        single grouped join over it: four queries total, never one per tag.
+        """
+        from mealie.db.models.recipe.category import recipes_to_categories
+        from mealie.db.models.recipe.tag import recipes_to_tags
+
+        q = sa.select(self.model.id).filter(self.model.household_id.is_not(None))
+        q = q.filter_by(**self._filter_builder())
+
+        # Mirrors page_all: a cookbook's filter string merges with any caller-supplied filter
+        # (the public route injects its visibility filter this way).
+        merged_filter = query_filter
+        if cookbook and cookbook.query_filter_string:
+            merged_filter = (
+                f"({merged_filter}) AND ({cookbook.query_filter_string})"
+                if merged_filter
+                else cookbook.query_filter_string
+            )
+
+        if not cookbook:
+            filters = self._build_recipe_filter(
+                categories=self._uuids_for_items(categories, Category),
+                tags=self._uuids_for_items(tags, Tag),
+                tools=self._uuids_for_items(tools, Tool),
+                foods=foods,
+                households=self._uuids_for_items(households, Household),
+                require_all_categories=require_all_categories,
+                require_all_tags=require_all_tags,
+                require_all_tools=require_all_tools,
+                require_all_foods=require_all_foods,
+            )
+            q = q.filter(*filters)
+
+        if merged_filter:
+            q = QueryFilterBuilder(merged_filter).filter_query(q, model=self.model, column_aliases=self.column_aliases)
+
+        if search:
+            q = self.add_search_to_query(q, self.schema, search)
+
+        # Joins above duplicate recipe rows per organiser match; DISTINCT is load-bearing here
+        # for the same reason it is in count_by_cookbooks — without it, counts drift high.
+        recipe_ids = q.order_by(None).distinct().subquery()
+
+        def facet(model, assoc_table, fk_column) -> list[FacetItem]:
+            rows = self.session.execute(
+                sa.select(model.id, model.name, model.slug, sa.func.count(sa.distinct(assoc_table.c.recipe_id)))
+                .join(assoc_table, fk_column == model.id)
+                .where(assoc_table.c.recipe_id.in_(sa.select(recipe_ids.c.id)))
+                .group_by(model.id, model.name, model.slug)
+                .order_by(model.name)
+            ).all()
+            return [FacetItem(id=row[0], name=row[1], slug=row[2], count=row[3]) for row in rows]
+
+        return RecipeFacets(
+            tags=facet(Tag, recipes_to_tags, recipes_to_tags.c.tag_id),
+            categories=facet(Category, recipes_to_categories, recipes_to_categories.c.category_id),
+            tools=facet(Tool, recipes_to_tools, recipes_to_tools.c.tool_id),
+        )
 
     def _build_recipe_filter(
         self,

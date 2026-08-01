@@ -85,7 +85,7 @@
                     :key="`radio-${item.id}`"
                     v-memo="[item.id, item.name, selectedRadio?.id]"
                     :value="item"
-                    :title="item.name"
+                    :title="displayTitle(item)"
                   >
                     <template #prepend>
                       <v-list-item-action start>
@@ -113,7 +113,7 @@
                     :key="`checkbox-${item.id}`"
                     v-memo="[item.id, item.name, selectedIds.has(item.id)]"
                     :value="item"
-                    :title="item.name"
+                    :title="displayTitle(item)"
                   >
                     <template #prepend>
                       <v-list-item-action start>
@@ -210,6 +210,16 @@ const selectedRadio = computed<null | ISearchableItem>({
 
 const selectedCount = computed(() => selected.value.length);
 const selectedIds = computed(() => new Set(selected.value.map(item => item.id)));
+
+/**
+ * "beef (23)" when the item carries a facet count, plain name otherwise. Display-only — the
+ * item's `name` stays pure so selection objects, URL restore and the query builder are
+ * untouched. A count of 0 renders too: that is a selected option pinned in so it can be
+ * deselected after narrowing results to nothing.
+ */
+function displayTitle(item: ISearchableItem & { count?: number }): string {
+  return item.count != null ? `${item.name} (${item.count})` : item.name;
+}
 
 const handleRadioClick = (item: ISearchableItem) => {
   if (selectedRadio.value === item) {
