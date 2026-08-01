@@ -64,6 +64,25 @@ def normalize_for_oembed(url: str) -> str | None:
     return None
 
 
+def to_ytdlp_form(url: str) -> str:
+    """
+    The URL form yt-dlp can actually read.
+
+    yt-dlp returns "Unsupported URL" for TikTok's /photo/ (slideshow) form, but the /video/ form
+    of the SAME post id downloads that post's audio track fine — verified live on
+    /photo/7664708192911265037 (Unsupported) vs /video/7664708192911265037 (32s, ~500KB mp3).
+
+    Keeps the handle. The handle-less /@/video/{id} rebuild is verified for oEmbed only; yt-dlp
+    has never been tested against it, so this is a swap, not a reconstruction. Non-TikTok URLs
+    pass through untouched. Short links must be resolved BEFORE this can see anything — they
+    carry no /photo/ or /video/ segment at all.
+    """
+    if not is_tiktok_url(url):
+        return url
+
+    return url.replace("/photo/", "/video/")
+
+
 def is_short_link(url: str) -> bool:
     """
     Whether this is a TikTok short link, which has to be followed before oEmbed will answer.

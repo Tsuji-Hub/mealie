@@ -1,6 +1,6 @@
 import pytest
 
-from mealie.services.scraper.tiktok import is_short_link, is_tiktok_url, normalize_for_oembed
+from mealie.services.scraper.tiktok import is_short_link, is_tiktok_url, normalize_for_oembed, to_ytdlp_form
 
 GOULASH = "https://www.tiktok.com/@jujumaoo/video/7550296202940632341"
 VIDEO_OEMBED = "https://www.tiktok.com/@/video/7550296202940632341"
@@ -104,3 +104,36 @@ def test_is_short_link(url: str, expected: bool):
 )
 def test_normalize_for_oembed_returns_none(url: str):
     assert normalize_for_oembed(url) is None
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        # THE FIX: yt-dlp answers "Unsupported URL" for /photo/ but downloads the /video/ form of
+        # the SAME post (verified live: photo/7664708192911265037 fails, video/... gives 32s mp3).
+        # The handle is KEPT — /@/video/ is oEmbed-verified only, never tested against yt-dlp.
+        (
+            "https://www.tiktok.com/@chloepoulton.co/photo/7664708192911265037",
+            "https://www.tiktok.com/@chloepoulton.co/video/7664708192911265037",
+        ),
+        # Query params survive the swap.
+        (
+            "https://www.tiktok.com/@chloepoulton.co/photo/7664708192911265037?_r=1&_t=abc",
+            "https://www.tiktok.com/@chloepoulton.co/video/7664708192911265037?_r=1&_t=abc",
+        ),
+        # Already the video form: unchanged.
+        (
+            "https://www.tiktok.com/@michaeldean2.0/video/7646421170358652173",
+            "https://www.tiktok.com/@michaeldean2.0/video/7646421170358652173",
+        ),
+        # Not TikTok: byte-identical passthrough, even with /photo/ in the path.
+        (
+            "https://www.allrecipes.com/recipe/223042/chicken-parmesan/",
+            "https://www.allrecipes.com/recipe/223042/chicken-parmesan/",
+        ),
+        ("https://example.com/photo/123", "https://example.com/photo/123"),
+        ("", ""),
+    ],
+)
+def test_to_ytdlp_form(url: str, expected: str):
+    assert to_ytdlp_form(url) == expected

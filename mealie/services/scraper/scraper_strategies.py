@@ -32,7 +32,7 @@ from mealie.services.openai import OpenAIService
 from mealie.services.scraper.scraped_extras import ScrapedExtras
 
 from . import cleaner
-from .tiktok import OEMBED_ENDPOINT, is_short_link, is_tiktok_url, normalize_for_oembed
+from .tiktok import OEMBED_ENDPOINT, is_short_link, is_tiktok_url, normalize_for_oembed, to_ytdlp_form
 
 SCRAPER_TIMEOUT = 15
 
@@ -576,6 +576,48 @@ class RecipeScraperOpenAITranscription(ABCScraperStrategy):
         content = re.sub(r"<[^>]+>", "", raw_content)
         return content
 
+    @staticmethod
+    def _is_empty_recipe(recipe: Recipe) -> bool:
+        """A recipe with no ingredients and no steps is not a recipe — it is a title."""
+        return not recipe.recipe_ingredient and not recipe.recipe_instructions
+
+    def _ytdlp_url(self) -> str:
+        """The URL to hand yt-dlp.
+
+        yt-dlp cannot read TikTok's /photo/ (slideshow) form — it returns Unsupported URL — but
+        the /video/ form of the SAME post id downloads that post's audio track fine. Short links
+        carry no id, so they have to be resolved before the swap can see anything. Mirrors what
+        normalize_for_oembed() already does for the caption path; the transcription path never
+        got the same treatment, which made every photo post unimportable.
+
+        Sync urllib on purpose: this runs inside the already-blocking yt-dlp download path, and
+        it is the exact resolution the live hotfix verified.
+        """
+        url = self.url or ""
+        if not is_tiktok_url(url):
+            return url
+
+        if is_short_link(url):
+            try:
+                import urllib.request
+
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+                        )
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=SCRAPER_TIMEOUT) as resp:  # noqa: S310 - https-only TikTok host
+                    url = resp.url or url
+            except Exception:
+                self.logger.warning(f"Could not resolve TikTok short link {url}")
+                return url
+
+        return to_ytdlp_form(url)
+
     def _download_audio(self, temp_path: Path) -> TranscribedAudio:
         """Downloads audio and subtitles from the video URL."""
         output_template = temp_path / "mealie"  # No extension here
@@ -599,9 +641,12 @@ class RecipeScraperOpenAITranscription(ABCScraperStrategy):
             "postprocessor_args": ["-ac", "1"],
         }
 
+        # Resolved once, used for both attempts — the retry must not re-resolve the short link.
+        target_url = self._ytdlp_url()
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(self.url, download=True)
+                info = ydl.extract_info(target_url, download=True)
 
                 if info is None:
                     raise exceptions.VideoDownloadError(
@@ -615,8 +660,17 @@ class RecipeScraperOpenAITranscription(ABCScraperStrategy):
                         sub_path = potential_path
                         break
 
+                audio_path = output_template.with_suffix(".mp3")
+                if not audio_path.exists():
+                    # ignoreerrors=True means a failed fragment fetch produces no file and no
+                    # exception — it surfaces three call frames away as a confusing
+                    # FileNotFoundError. Retry once loudly instead.
+                    self.logger.warning("No audio produced on first attempt; retrying once")
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
+                        ydl_retry.extract_info(target_url, download=True)
+
                 return {
-                    "audio": output_template.with_suffix(".mp3"),
+                    "audio": audio_path,
                     "subtitle": sub_path,
                     "title": info.get("title", ""),
                     "description": info.get("description", ""),
@@ -715,6 +769,17 @@ class RecipeScraperOpenAITranscription(ABCScraperStrategy):
             image=video_data["thumbnail_url"] or None,
             org_url=self.url,
         )
+
+        # A transcript with no recipe in it still yields a well-formed Recipe object — the model
+        # names it after the caption and returns empty lists. That happens whenever a TikTok's
+        # audio is just the backing song, which is most photo slideshows. Saving it would create
+        # a titled, contentless recipe; declining lets the other strategies run instead.
+        if self._is_empty_recipe(recipe):
+            self.logger.info(
+                f"Transcript had no recipe in it (likely background music, not narration): "
+                f"{video_data['title'][:60]!r} -- declining rather than saving an empty recipe"
+            )
+            return None, None
 
         self.logger.info(f"Successfully extracted recipe from video: {video_data['title']}")
         return recipe, ScrapedExtras()
