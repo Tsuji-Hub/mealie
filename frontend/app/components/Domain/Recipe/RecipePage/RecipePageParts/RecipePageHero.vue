@@ -34,15 +34,20 @@
         :source="recipe.description"
         class="fork-hero__desc"
       />
-      <div v-if="timeDisplay || recipe.rating" class="fork-hero__meta">
+      <div v-if="timeDisplay || recipe.rating || isOwnGroup" class="fork-hero__meta">
         <span v-if="timeDisplay" class="d-inline-flex align-center" :title="timeTitle">
           <v-icon size="small" color="primary" class="mr-1">
             {{ $globals.icons.clockOutline }}
           </v-icon>
           {{ timeDisplay }}
         </span>
+        <!-- Rendered whenever YOU could rate, not only when a rating already exists. The old
+             `v-if="recipe.rating"` was the second half of the discoverability bug: with zero
+             ratings in the library, the rating control never mounted anywhere, so fixing the
+             hover gate inside the component alone would have surfaced nothing. Public viewers
+             still only see stars when a rating exists (the component renders them readonly). -->
         <RecipeRating
-          v-if="recipe.rating"
+          v-if="recipe.rating || isOwnGroup"
           :key="recipe.slug"
           small
           :model-value="recipe.rating"
@@ -60,10 +65,13 @@ import RecipePageMacroBar from "./RecipePageMacroBar.vue";
 import RecipeRating from "~/components/Domain/Recipe/RecipeRating.vue";
 import { useStaticRoutes } from "~/composables/api";
 import { usePageState } from "~/composables/recipe-page/shared-state";
+import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe } from "~/lib/api/types/recipe";
 
 const props = defineProps<{ recipe: NoUndefinedField<Recipe> }>();
+
+const { isOwnGroup } = useLoggedInState();
 
 const i18n = useI18n();
 const display = useDisplay();

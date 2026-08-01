@@ -14,6 +14,13 @@ export default {
     globals: true,
     environment: "jsdom",
     setupFiles: ["./app/tests/setup.ts"],
+    server: {
+      deps: {
+        // Vuetify ships raw .css imports; without inlining, Node's ESM loader hits them
+        // directly and component mount tests cannot import vuetify/components.
+        inline: ["vuetify"],
+      },
+    },
     coverage: {
       provider: "v8",
       include: ["app/{lib,components,composables,layouts,pages}/**/*.{ts,tsx,vue}"],
