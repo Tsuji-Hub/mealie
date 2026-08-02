@@ -10,7 +10,7 @@
     offset="6"
   >
     <template #activator="{ props: menuProps }">
-      <slot name="activator" :props="menuProps" :label="chipLabel" :rated="!!userRating" />
+      <slot name="activator" :props="menuProps" :label="chipLabel" :chip-text="chipText" :rated="!!userRating" />
     </template>
 
     <v-card class="fork-rate-card" min-width="252">
@@ -54,12 +54,20 @@ const userRating = computed(
   () => userRatings.value.find(r => r.recipeId === props.recipeId)?.rating ?? undefined,
 );
 
-/** "4.5" for the chip — the user's own rating first, else the group average, else empty
- * (a bare hollow star then reads as "rate me"). */
+/** "4.5" for the chip — the user's own rating first, else the group average, else empty. */
 const chipLabel = computed(() => {
   const value = userRating.value || props.groupRating || 0;
   return value ? String(Math.round(value * 2) / 2) : "";
 });
+
+/**
+ * What the chip SAYS. A bare hollow star turned out not to read as "rate me" — Ethan looked
+ * straight at it and reported "I don't see any stars". Every other badge on the card carries
+ * text ("Dessert", "273 kcal"), so the one textless chip read as decoration, weakest exactly
+ * in the only state where discovering it matters. The empty state now says "Rate"; rated
+ * states keep their number.
+ */
+const chipText = computed(() => chipLabel.value || "Rate");
 </script>
 
 <style lang="scss" scoped>

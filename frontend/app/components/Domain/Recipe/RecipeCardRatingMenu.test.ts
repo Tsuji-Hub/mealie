@@ -30,8 +30,8 @@ function build(props: Record<string, unknown> = {}) {
   return mount(RecipeCardRatingMenu, {
     props: { recipeId: "r1", slug: "test-recipe", ...props },
     slots: {
-      activator: `<template #activator="{ props: p, label, rated }">
-        <button class="probe" v-bind="p">{{ rated ? "R" : "U" }}|{{ label }}</button>
+      activator: `<template #activator="{ props: p, label, chipText, rated }">
+        <button class="probe" v-bind="p">{{ rated ? "R" : "U" }}|{{ label }}|{{ chipText }}</button>
       </template>`,
     },
     global: { plugins: [vuetify] },
@@ -44,20 +44,22 @@ beforeEach(() => {
 });
 
 describe("RecipeCardRatingMenu", () => {
-  test("unrated: the activator gets an empty label — a bare hollow star is the affordance", () => {
+  // A bare hollow star did NOT read as an affordance — Ethan looked straight at it and said
+  // "I don't see any stars". The only textless badge on the card read as decoration.
+  test("STATE 1 — nobody has rated: the chip says 'Rate'", () => {
     const wrapper = build();
-    expect(wrapper.find(".probe").text()).toBe("U|");
+    expect(wrapper.find(".probe").text()).toBe("U||Rate");
   });
 
-  test("the user's own rating wins the chip label over the group average", () => {
+  test("STATE 3 — the user's own rating wins the chip label over the group average", () => {
     userRatings.value = [{ recipeId: "r1", rating: 4.5 }];
     const wrapper = build({ groupRating: 3 });
-    expect(wrapper.find(".probe").text()).toBe("R|4.5");
+    expect(wrapper.find(".probe").text()).toBe("R|4.5|4.5");
   });
 
-  test("falls back to the group average when the user hasn't rated", () => {
+  test("STATE 2 — group rated, user hasn't: the number shows (muted via rated=false), NOT 'Rate'", () => {
     const wrapper = build({ groupRating: 3.5 });
-    expect(wrapper.find(".probe").text()).toBe("U|3.5");
+    expect(wrapper.find(".probe").text()).toBe("U|3.5|3.5");
   });
 
   test("public view renders nothing — a control you cannot use is a broken button", () => {

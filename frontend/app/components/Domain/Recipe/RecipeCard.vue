@@ -84,7 +84,7 @@
             :slug="slug"
             :group-rating="rating"
           >
-            <template #activator="{ props: menuProps, label, rated }">
+            <template #activator="{ props: menuProps, label, chipText, rated }">
               <button
                 type="button"
                 class="fork-tile__rate"
@@ -94,7 +94,7 @@
                 @click.stop.prevent
               >
                 <span class="fork-tile__rate-star">{{ label ? "★" : "☆" }}</span>
-                <span v-if="label" class="fork-tile__rate-num">{{ label }}</span>
+                <span class="fork-tile__rate-num">{{ chipText }}</span>
               </button>
             </template>
           </RecipeCardRatingMenu>
