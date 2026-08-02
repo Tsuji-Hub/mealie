@@ -74,6 +74,30 @@
           <span v-if="timeLabel" class="fork-tile__time">
             <v-icon size="12" class="mr-1">{{ $globals.icons.clockOutline }}</v-icon>{{ timeLabel }}
           </span>
+
+          <!-- Rate from the card: a single star chip opens a menu with full-size half-increment
+               stars — Ethan's own ask, and the same one-tap menu pattern as the category pill.
+               Bottom-left, opposite the time badge. Logged-in only; public cards can't rate. -->
+          <RecipeCardRatingMenu
+            v-if="isOwnGroup"
+            :recipe-id="recipeId"
+            :slug="slug"
+            :group-rating="rating"
+          >
+            <template #activator="{ props: menuProps, label, rated }">
+              <button
+                type="button"
+                class="fork-tile__rate"
+                :class="{ 'fork-tile__rate--rated': rated }"
+                :aria-label="label ? `Rated ${label} of 5 — change rating` : 'Rate this recipe'"
+                v-bind="menuProps"
+                @click.stop.prevent
+              >
+                <span class="fork-tile__rate-star">{{ label ? "★" : "☆" }}</span>
+                <span v-if="label" class="fork-tile__rate-num">{{ label }}</span>
+              </button>
+            </template>
+          </RecipeCardRatingMenu>
         </div>
       </RecipeCardImage>
     </div>
@@ -124,6 +148,7 @@ import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
 import RecipeCardCategoryMenu from "./RecipeCardCategoryMenu.vue";
+import RecipeCardRatingMenu from "./RecipeCardRatingMenu.vue";
 import { tagHue } from "~/composables/recipes/use-tag-color";
 import { markEstimate } from "~/composables/recipes/use-nutrition-estimate";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
@@ -143,6 +168,8 @@ interface Props {
   totalTime?: string | null;
   servings?: number;
   yieldText?: string | null;
+  /** Group-average rating, shown on the star chip until the user rates it themselves. */
+  rating?: number;
 }
 const props = withDefaults(defineProps<Props>(), {
   image: "abc123",
@@ -154,6 +181,7 @@ const props = withDefaults(defineProps<Props>(), {
   totalTime: null,
   servings: 0,
   yieldText: null,
+  rating: 0,
 });
 
 defineEmits<{
@@ -291,12 +319,45 @@ const servingsLabel = computed(() =>
   white-space: nowrap;
 }
 
+/* Rate chip: bottom-left, mirroring the time badge — same glass pill so the photo corners read
+   as one badge family. Accent star once it's YOUR rating; muted while it's only the group's. */
+.fork-tile__rate {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f4efe8;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(18, 13, 9, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  line-height: 1.2;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.fork-tile__rate-star {
+  font-size: 13px;
+  line-height: 1;
+  color: rgba(244, 239, 232, 0.85);
+}
+.fork-tile__rate--rated .fork-tile__rate-star {
+  color: rgb(var(--v-theme-secondary));
+}
+
 /* Narrow (2-up phone) cards: shrink the badges so the category name + calories
    both fit, and drop the caret to save room. */
 @media (max-width: 599px) {
   .fork-tile__tag,
   .fork-tile__kcal,
-  .fork-tile__time {
+  .fork-tile__time,
+  .fork-tile__rate {
     font-size: 10.5px;
     padding: 3px 8px;
   }

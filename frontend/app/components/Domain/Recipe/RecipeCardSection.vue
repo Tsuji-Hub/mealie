@@ -133,6 +133,7 @@
               :total-time="recipe.totalTime"
               :servings="recipe.recipeServings"
               :yield-text="recipe.recipeYield"
+              :rating="recipe.rating ?? 0"
               @category-removed="(slug, cat) => $emit('categoryRemoved', slug, cat)"
             />
           </v-col>

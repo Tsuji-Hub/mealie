@@ -87,6 +87,27 @@ describe("rating updates", () => {
     expect(setRating).toHaveBeenCalledWith("test-recipe", 0, null);
   });
 
+  test("half stars persist as halves — 3.5 goes to the API as 3.5", () => {
+    const wrapper = build();
+    const vm = wrapper.vm as unknown as { updateRating: (v?: number) => void };
+    vm.updateRating(3.5);
+    expect(setRating).toHaveBeenCalledWith("test-recipe", 3.5, null);
+  });
+
+  test("clicking the current HALF value clears it too", () => {
+    userRatings.value = [{ recipeId: "r1", rating: 3.5 }];
+    const wrapper = build({}, 3.5);
+    const vm = wrapper.vm as unknown as { updateRating: (v?: number) => void };
+    vm.updateRating(3.5);
+    expect(setRating).toHaveBeenCalledWith("test-recipe", 0, null);
+  });
+
+  test("the interactive row accepts half increments", () => {
+    const wrapper = build();
+    const rating = wrapper.findComponent({ name: "VRating" });
+    expect(rating.props("halfIncrements")).toBe(true);
+  });
+
   test("public view never persists a rating", () => {
     isOwnGroup.value = false;
     const wrapper = build();

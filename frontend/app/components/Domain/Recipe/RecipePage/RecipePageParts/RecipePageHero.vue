@@ -46,10 +46,12 @@
              ratings in the library, the rating control never mounted anywhere, so fixing the
              hover gate inside the component alone would have surfaced nothing. Public viewers
              still only see stars when a rating exists (the component renders them readonly). -->
+        <!-- Full-size stars, not `small`: "they are very small" was the first thing Ethan said
+             after rating became visible. These are the primary rating surface — tap targets
+             matter more than compactness here. -->
         <RecipeRating
           v-if="recipe.rating || isOwnGroup"
           :key="recipe.slug"
-          small
           :model-value="recipe.rating"
           :recipe-id="recipe.id"
           :slug="recipe.slug"

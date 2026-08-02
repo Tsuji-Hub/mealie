@@ -12,6 +12,7 @@
       active-color="secondary"
       color="secondary-lighten-3"
       length="5"
+      half-increments
       :density="small ? 'compact' : 'default'"
       :size="small ? 'x-small' : undefined"
       hover

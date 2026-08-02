@@ -87,8 +87,31 @@
                 class="ma-0 pa-0"
               />
               <div v-else class="my-0 px-1 py-0" /> <!-- Empty div to keep the layout consistent -->
+              <!-- Own group: the stars open the rate menu (tap-to-rate, same as grid cards).
+                   Public: the plain display stays, since there is nothing to tap. -->
+              <RecipeCardRatingMenu
+                v-if="showRecipeContent && isOwnGroup"
+                :recipe-id="recipeId"
+                :slug="slug"
+                :group-rating="rating"
+              >
+                <template #activator="{ props: menuProps }">
+                  <button
+                    type="button"
+                    class="ml-n2 fork-rate-tap"
+                    aria-label="Rate this recipe"
+                    v-bind="menuProps"
+                    @click.stop.prevent
+                  >
+                    <RecipeCardRating
+                      :model-value="rating"
+                      :recipe-id="recipeId"
+                    />
+                  </button>
+                </template>
+              </RecipeCardRatingMenu>
               <RecipeCardRating
-                v-if="showRecipeContent"
+                v-else-if="showRecipeContent"
                 :class="[{ 'pb-2': !isOwnGroup }, 'ml-n2']"
                 :model-value="rating"
                 :recipe-id="recipeId"
@@ -129,6 +152,7 @@ import RecipeFavoriteBadge from "./RecipeFavoriteBadge.vue";
 import RecipeContextMenu from "./RecipeContextMenu/RecipeContextMenu.vue";
 import RecipeCardImage from "./RecipeCardImage.vue";
 import RecipeCardRating from "./RecipeCardRating.vue";
+import RecipeCardRatingMenu from "./RecipeCardRatingMenu.vue";
 import RecipeChips from "./RecipeChips.vue";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
 
@@ -211,5 +235,18 @@ const cursor = computed(() => showRecipeContent.value ? "pointer" : "auto");
 
 .disable-highlight :deep(.v-card__overlay) {
   opacity: 0 !important;
+}
+
+/* The tap-to-rate wrapper must look exactly like the plain display it wraps. */
+.fork-rate-tap {
+  font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
 }
 </style>
