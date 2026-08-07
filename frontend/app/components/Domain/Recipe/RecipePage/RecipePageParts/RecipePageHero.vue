@@ -28,7 +28,12 @@
       :class="{ 'fork-hero__stats--float': hasPhoto }"
     />
 
-    <div v-if="recipe.description || timeDisplay || recipe.rating" class="fork-hero__foot">
+    <!-- `|| isOwnGroup` matters: without it, a recipe with no description, no time and no
+         rating (108 of 272 at last count) never rendered this foot, so the correctly-gated
+         rating rows inside had nowhere to mount. Fourth nested gate found on this one feature —
+         when touching any layer of this chain, walk ALL of it (the full list lives in
+         .claude/cowork-notes.md and each layer from here down must pass isOwnGroup through). -->
+    <div v-if="recipe.description || timeDisplay || recipe.rating || isOwnGroup" class="fork-hero__foot">
       <SafeMarkdown
         v-if="recipe.description"
         :source="recipe.description"

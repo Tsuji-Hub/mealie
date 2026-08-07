@@ -6,7 +6,9 @@ export default {
   plugins: [
     vue(),
     AutoImport({
-      imports: ["vue", "@vueuse/core", "vue-i18n"],
+      // vuetify's useDisplay is auto-imported by the nuxt module in the app; mirror it here so
+      // components using it bare can be mounted in tests.
+      imports: ["vue", "@vueuse/core", "vue-i18n", { vuetify: ["useDisplay"] }],
       dts: false,
     }),
   ],
