@@ -110,12 +110,22 @@
         v-model="recipe"
         class="px-1 my-4 d-print-none"
       />
-      <RecipePrintContainer :recipe="recipe" :scale="scale" />
+      <!-- Fork: the print duplicate mounts at idle, off the entry critical path — it is a full
+           hidden re-render of the recipe (all steps through marked + DOMPurify again) that no
+           one sees unless they print. `beforeprint` also flips it as a belt for a Ctrl+P that
+           beats the idle callback; the idle timeout bounds the race to ~1s after entry. -->
+      <RecipePrintContainer v-if="printReady" :recipe="recipe" :scale="scale" />
     </v-container>
     <!-- Cook mode displayes two columns with ingredients and instructions side by side, each being scrolled individually, allowing to view both at the same time -->
     <!-- The calc is to account for the navabar height (48px) -->
+    <!-- Fork: v-if, not v-show. With v-show BOTH cook sheets fully mounted on every recipe
+         entry — a second and third copy of the instruction/ingredient trees (each step runs
+         marked.parse + DOMPurify) that also had to be torn down again on every leave. The two
+         hidden sheets held ~45% of the page's DOM nodes. Cost of the trade: entering cook mode
+         mounts the sheet fresh (a deliberate button press), instead of every page visit paying
+         for a mode almost never used. -->
     <v-sheet
-      v-show="isCookMode && !hasLinkedIngredients"
+      v-if="isCookMode && !hasLinkedIngredients"
       key="cookmode"
       :height="$vuetify.display.smAndUp ? 'calc(100vh - 48px)' : 'auto'"
       class-name="overflow-hidden"
@@ -154,7 +164,7 @@
         </v-col>
       </v-row>
     </v-sheet>
-    <v-sheet v-show="isCookMode && hasLinkedIngredients">
+    <v-sheet v-if="isCookMode && hasLinkedIngredients">
       <div class="mt-2 px-2 px-md-4">
         <RecipePageScale v-model="scale" :recipe="recipe" />
       </div>
@@ -191,7 +201,7 @@
 </template>
 
 <script setup lang="ts">
-import { invoke, until } from "@vueuse/core";
+import { invoke, until, useEventListener } from "@vueuse/core";
 import type { RouteLocationNormalized } from "vue-router";
 import RecipeIngredients from "../RecipeIngredients.vue";
 import RecipePageEditorToolbar from "./RecipePageParts/RecipePageEditorToolbar.vue";
@@ -338,6 +348,17 @@ onMounted(() => {
     toggleIsParsing(true);
   }
 });
+
+// Fork: gate for the deferred print duplicate (see template). Idle-mounted with a bounded
+// timeout so printing shortly after entry still finds it; `beforeprint` covers the remaining
+// sub-second race for both Ctrl+P and the header's print action.
+const printReady = ref(false);
+onMounted(() => {
+  type IdleWindow = Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number };
+  const idle = (window as IdleWindow).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1000));
+  idle(() => { printReady.value = true; }, { timeout: 1000 });
+});
+useEventListener(window, "beforeprint", () => { printReady.value = true; });
 
 // When set, the isEditMode watcher skips its URL cleanup because saveRecipe
 // is navigating to a new slug that naturally omits ?edit=true.

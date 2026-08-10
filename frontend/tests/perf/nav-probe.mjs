@@ -27,6 +27,15 @@
 
 const BUDGETS = { firstPaintMs: 300, cardsMs: 800, longTaskMs: 200 };
 
+/**
+ * Recipe-page budgets (PROMPT J round). Entry used to carry a 395 ms long task and leave a
+ * 0.25–1.05 s teardown gap — the page mounted the instruction/ingredient trees FOUR times
+ * (view + two hidden cook-mode sheets + the print duplicate), every copy running
+ * marked + DOMPurify per step, and tore all four down again on leave. After the fix the page
+ * mounts one copy (print mounts at idle, cook mode on demand).
+ */
+const RECIPE_BUDGETS = { entryContentMs: 800, entryLongTaskMs: 250, backSwapMs: 800, backLongTaskMs: 250 };
+
 export async function navProbe({ routes = null, settleMs = 2500 } = {}) {
   if (document.visibilityState !== "visible") {
     throw new Error("Tab is backgrounded — lazy image loading and rAF are suspended; foreground it first.");
@@ -104,4 +113,78 @@ export async function navProbe({ routes = null, settleMs = 2500 } = {}) {
   console.table(results.map(({ route, firstPaintMs, cardsMs, worstLongTaskMs, blankFrames, pass }) =>
     ({ route, firstPaintMs, cardsMs, worstLongTaskMs, blankFrames, pass })));
   return { budgets: BUDGETS, results, pass: failed.length === 0 };
+}
+
+/**
+ * Recipe-page entry + teardown probe. Run from /g/home, logged in:  await recipeProbe()
+ * Measures click -> recipe hero visible (entry, with worst long task), then history.back()
+ * -> grid cards visible again (the teardown gap, with worst long task). Same rules as
+ * navProbe: MutationObserver classification, visible tab required.
+ */
+export async function recipeProbe({ recipeHref = null, settleMs = 3000 } = {}) {
+  if (document.visibilityState !== "visible") {
+    throw new Error("Tab is backgrounded — foreground it first.");
+  }
+
+  const href = recipeHref ?? [...document.querySelectorAll("a[href*='/r/']")].map(a => a.getAttribute("href")).find(Boolean);
+  const link = href && document.querySelector(`a[href="${href}"]`);
+  if (!link) {
+    throw new Error("No recipe link found — run from /g/home while logged in.");
+  }
+
+  const phase = (t0) => {
+    const timeline = [];
+    const longTasks = [];
+    let last = "";
+    const classify = () => {
+      const cards = document.querySelectorAll(".fork-tile").length;
+      const hero = !!document.querySelector(".fork-hero-title, .fork-macros");
+      const state = hero ? "recipe" : cards > 0 ? `cards(${cards})` : "other";
+      if (state !== last) {
+        timeline.push({ t: Math.round(performance.now() - t0), state });
+        last = state;
+      }
+    };
+    const po = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(e => Math.round(e.duration))));
+    po.observe({ entryTypes: ["longtask"] });
+    const mo = new MutationObserver(classify);
+    mo.observe(document.body, { childList: true, subtree: true });
+    classify();
+    return { timeline, longTasks, stop: () => { mo.disconnect(); po.disconnect(); } };
+  };
+
+  // Entry: click -> recipe hero
+  let t0 = performance.now();
+  const entry = phase(t0);
+  link.click();
+  await new Promise(r => setTimeout(r, settleMs));
+  entry.stop();
+  const entryContent = entry.timeline.find(s => s.state === "recipe");
+  const entryWorst = Math.max(0, ...entry.longTasks);
+
+  // Teardown: back -> grid cards
+  t0 = performance.now();
+  const back = phase(t0);
+  history.back();
+  await new Promise(r => setTimeout(r, settleMs));
+  back.stop();
+  const backCards = back.timeline.find(s => s.state.startsWith("cards"));
+  const backWorst = Math.max(0, ...back.longTasks);
+
+  const result = {
+    budgets: RECIPE_BUDGETS,
+    route: href,
+    entry: { timeline: entry.timeline, contentMs: entryContent?.t ?? null, worstLongTaskMs: entryWorst },
+    back: { timeline: back.timeline, cardsMs: backCards?.t ?? null, worstLongTaskMs: backWorst },
+    pass:
+      entryContent != null && entryContent.t < RECIPE_BUDGETS.entryContentMs
+      && entryWorst < RECIPE_BUDGETS.entryLongTaskMs
+      && backCards != null && backCards.t < RECIPE_BUDGETS.backSwapMs
+      && backWorst < RECIPE_BUDGETS.backLongTaskMs,
+  };
+  console.table([
+    { phase: "entry", ms: result.entry.contentMs, worstLongTask: entryWorst },
+    { phase: "back", ms: result.back.cardsMs, worstLongTask: backWorst },
+  ]);
+  return result;
 }
