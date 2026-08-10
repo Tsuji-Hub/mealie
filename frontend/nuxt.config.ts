@@ -129,6 +129,20 @@ export default defineNuxtConfig({
     baseURL: process.env.SUB_PATH || "",
   },
 
+  vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          // Merge confetti chunks: the app shipped ~300 JS files, many tiny, and a cold or
+          // post-deploy load paid a request + eval round for each. This is Rollup's sanctioned
+          // small-chunk merging — no hand-rolled manualChunks surgery on Nuxt's graph, which is
+          // a known way to break code-splitting invariants.
+          experimentalMinChunkSize: 20_000,
+        },
+      },
+    },
+  },
+
   // eslint rules
   eslint: {
     config: {
@@ -215,7 +229,11 @@ export default defineNuxtConfig({
 
   // PWA module configuration: https://vite-pwa-org.netlify.app/frameworks/nuxt.html
   pwa: {
-    registerType: "autoUpdate",
+    // "prompt", not "autoUpdate": autoUpdate + skipWaiting swapped the SW underneath open tabs
+    // while their in-memory code stayed old — the exact staleness that has produced three false
+    // "it's not fixed" reports. Now the new SW WAITS, the app shows "new version — reload"
+    // (PwaReloadPrompt.vue), and updating is an explicit, visible act.
+    registerType: "prompt",
     devOptions: {
       enabled: false,
       suppressWarnings: true,
@@ -223,15 +241,29 @@ export default defineNuxtConfig({
     workbox: {
       navigateFallback: "/",
       navigateFallbackAllowlist: [/^(?!\/api|\/docs)/],
-      globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
+      // Precache only the small shell (html/css/icons). The ~230 hashed JS chunks used to be
+      // precached wholesale, so EVERY deploy re-downloaded the entire app on every device;
+      // they are immutable-by-URL, so runtime CacheFirst below caches them on first use
+      // instead, and a deploy only costs the chunks a page actually loads.
+      globPatterns: ["**/*.{css,html,png,svg,ico}"],
       globIgnores: ["404.html", "200.html", "index.html"],
+      runtimeCaching: [
+        {
+          urlPattern: /\/_nuxt\/.*\.(?:js|mjs|css|woff2?)$/,
+          handler: "CacheFirst",
+          options: {
+            cacheName: "nuxt-assets",
+            expiration: { maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            cacheableResponse: { statuses: [0, 200] },
+          },
+        },
+      ],
       cleanupOutdatedCaches: true,
-      skipWaiting: true,
       clientsClaim: true,
     },
     client: {
       installPrompt: true,
-      periodicSyncForUpdates: 120,
+      periodicSyncForUpdates: 3600,
     },
     includeAssets: ["favicon.ico", "apple-touch-icon.png", "safari-pinned-tab.svg"],
     manifest: false, // This is served via the backend, see mealie/routes/spa/manifest.py

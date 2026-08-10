@@ -271,7 +271,6 @@ const ready = ref(false);
 const loading = ref(false);
 
 const { fetchMore, getRandom } = useLazyRecipes(isOwnGroup.value ? null : groupSlug.value);
-const { savePosition, getSavedPage, restorePosition } = useScrollPosition();
 const router = useRouter();
 
 const queryFilter = computed(() => {
@@ -349,11 +348,9 @@ async function revalidate(key: string) {
 
 // SWR hit, decided during setup so the FIRST render already skips the skeletons — deciding in
 // onMounted still inserts skeleton nodes for one (unpainted) tick, which a MutationObserver
-// probe rightly flags. Deep scroll restores (savedPage > 2) keep the network path: their
-// multi-page fetch is a different shape than the cached first page.
+// probe rightly flags.
 const warmKey = currentCacheKey();
-const warmSavedPage = getSavedPage(route.path);
-const warmEntry = warmKey && !(warmSavedPage && warmSavedPage > 2) ? getCachedList(warmKey) : null;
+const warmEntry = warmKey ? getCachedList(warmKey) : null;
 if (warmEntry) {
   page.value = 2;
   hasMore.value = warmEntry.hasMore;
@@ -365,37 +362,33 @@ onMounted(async () => {
   // refetch behind them and swap only if something changed.
   if (warmKey && warmEntry) {
     emit(REPLACE_RECIPES_EVENT, warmEntry.recipes);
-    if (warmSavedPage) {
-      await nextTick();
-      restorePosition(route.path);
-    }
     await revalidate(warmKey);
     return;
   }
 
   loading.value = true;
-  const savedPage = getSavedPage(route.path);
-
-  if (savedPage && savedPage > 2) {
-    page.value = 1;
-    hasMore.value = true;
-    const newRecipes = await fetchRecipes(savedPage);
-    if (newRecipes.length < perPage * savedPage) {
-      hasMore.value = false;
-    }
-    page.value = savedPage;
-    emit(REPLACE_RECIPES_EVENT, newRecipes);
-    ready.value = true;
-    restorePosition(route.path);
-  }
-  else {
-    await initRecipes();
-    ready.value = true;
-    if (savedPage) {
-      restorePosition(route.path);
-    }
-  }
+  await initRecipes();
+  ready.value = true;
   loading.value = false;
+});
+
+// Grid pages are kept alive (definePageMeta keepalive), so back-navigation RE-ACTIVATES this
+// instance — DOM, full scrolled list, page counter, scroll position all intact — instead of
+// remounting it. That retires the old savedPage/restorePosition machinery, which "restored" by
+// refetching N pages over the network and then scrolling: the refetch-on-back the perf audit
+// measured, and a suspect in the residual heap growth. On re-activation we only revalidate
+// behind the preserved paint; a byte-identical result changes nothing on screen.
+let activatedOnce = false;
+onActivated(async () => {
+  if (!activatedOnce) {
+    // The first activation accompanies onMounted, which already fetched.
+    activatedOnce = true;
+    return;
+  }
+  const key = currentCacheKey();
+  if (key) {
+    await revalidate(key);
+  }
 });
 
 let lastQuery: string | undefined = JSON.stringify(props.query);
@@ -453,8 +446,6 @@ const infiniteScroll = useThrottleFn(async () => {
   if (newRecipes.length) {
     emit(APPEND_RECIPES_EVENT, newRecipes);
   }
-
-  savePosition(route.path, page.value);
 
   loading.value = false;
 }, 500);

@@ -1,6 +1,7 @@
 <template>
   <v-app dark>
     <TheSnackbar />
+    <PwaReloadPrompt />
 
     <AppHeader>
       <v-btn
@@ -86,7 +87,13 @@
     <v-main class="pt-12">
       <v-scroll-x-transition>
         <div>
-          <NuxtPage />
+          <!-- Global KeepAlive with an include list, NOT per-page `definePageMeta({keepalive})`:
+               the per-page form conditionally renders the KeepAlive wrapper, so navigating
+               through any non-kept route (every recipe page) destroyed the cached grids and
+               back-nav remounted + refetched anyway — measured, not theorized. The include
+               list names only the grid pages; recipe pages stay un-kept on purpose (their
+               unmount hooks -- clearPageState, navigation warnings -- assume real unmounts). -->
+          <NuxtPage :keepalive="{ include: ['HomeGridPage', 'CookbookGridPage'], max: 6 }" />
         </div>
       </v-scroll-x-transition>
     </v-main>
