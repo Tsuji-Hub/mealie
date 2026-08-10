@@ -10,6 +10,7 @@
     v-model="selectedCategories"
     v-model:require-all="state.requireAllCategories"
     :items="categoryOptions"
+    @open="categoryActions.hydrate()"
   >
     <v-icon start>
       {{ $globals.icons.categories }}
@@ -23,6 +24,7 @@
     v-model="selectedTags"
     v-model:require-all="state.requireAllTags"
     :items="tagOptions"
+    @open="tagActions.hydrate()"
   >
     <v-icon start>
       {{ $globals.icons.tags }}
@@ -36,6 +38,7 @@
     v-model="selectedTools"
     v-model:require-all="state.requireAllTools"
     :items="toolOptions"
+    @open="toolActions.hydrate()"
   >
     <v-icon start>
       {{ $globals.icons.potSteam }}
@@ -109,17 +112,36 @@ const {
   passedQueryWithSeed,
 } = useRecipeExplorerSearch(groupSlug);
 
-// The global stores are now the FALLBACK, not the source: bound directly, they offered every
-// organiser in the group unconditionally — dessert-only tags inside the Dinner scope.
-const { store: categories } = isOwnGroup.value ? useCategoryStore() : usePublicCategoryStore(groupSlug.value);
-const { store: tags } = isOwnGroup.value ? useTagStore() : usePublicTagStore(groupSlug.value);
-const { store: tools } = isOwnGroup.value ? useToolStore() : usePublicToolStore(groupSlug.value);
-// Lazy, and hydrated by the filter's @open above. The store is module-scoped, so this and the
-// one in use-recipe-explorer-search share `initialized` — whichever fires first pays, once.
+// The global stores are the FALLBACK, not the source: option lists come from the facets
+// endpoint below; the stores only serve when facets fail, and resolve deep-link chips. ALL
+// lazy since the 2026-08-10 access-log storm showed each eager construction firing its
+// unbounded perPage=-1 fetch on every installed-app cold launch. Hydrated by each filter's
+// @open (the foods pattern, generalized) — the stores are module-scoped, so these and the
+// ones in use-recipe-explorer-search share `initialized`; whichever fires first pays, once.
+const { store: categories, actions: categoryActions } = isOwnGroup.value
+  ? useCategoryStore(undefined, { lazy: true })
+  : usePublicCategoryStore(groupSlug.value, undefined, { lazy: true });
+const { store: tags, actions: tagActions } = isOwnGroup.value
+  ? useTagStore(undefined, { lazy: true })
+  : usePublicTagStore(groupSlug.value, undefined, { lazy: true });
+const { store: tools, actions: toolActions } = isOwnGroup.value
+  ? useToolStore(undefined, { lazy: true })
+  : usePublicToolStore(groupSlug.value, undefined, { lazy: true });
 const { store: foods, actions: foodActions } = isOwnGroup.value
   ? useFoodStore(undefined, { lazy: true })
   : usePublicFoodStore(groupSlug.value, undefined, { lazy: true });
-const { store: households } = isOwnGroup.value ? useHouseholdStore() : usePublicHouseholdStore(groupSlug.value);
+const { store: households, actions: householdActions } = isOwnGroup.value
+  ? useHouseholdStore(undefined, { lazy: true })
+  : usePublicHouseholdStore(groupSlug.value, undefined, { lazy: true });
+
+// The household filter is the one selector whose VISIBILITY depends on store rows
+// (`v-if="households.length > 1"` — no facet source), so a never-hydrated store would hide it
+// forever. Hydrate at idle: off the launch critical path, present a moment later.
+onMounted(() => {
+  type IdleWindow = Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number };
+  const idle = (window as IdleWindow).requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 2000));
+  idle(() => { householdActions.hydrate(); }, { timeout: 4000 });
+});
 
 // ---- Facets: only offer an option if choosing it would return something ------------------
 const api = useUserApi();

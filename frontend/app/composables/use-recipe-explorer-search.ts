@@ -72,18 +72,27 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
     randomSeed: 0,
   });
 
-  // Store references
-  const categories = isOwnGroup.value ? useCategoryStore() : usePublicCategoryStore(groupSlug.value);
-  // Lazy: this composable only needs the food store to resolve `?foods=` back into chips, which
-  // most page loads never do. Constructing it eagerly here is what put a 1.2 MB fetch on every
-  // visit to /g/home. Hydrated below when a query actually references foods, and by the filter
-  // menu when it opens.
+  // Store references — ALL lazy. This composable only needs the stores to resolve query params
+  // (?categories=, ?tags=, ...) back into chips, which most page loads never carry; the filter
+  // OPTION lists come from the facets endpoint, not from here. Constructing these eagerly put
+  // four unbounded perPage=-1 fetches on every installed-app cold launch (the access-log storm,
+  // 2026-08-10) — the same bug the food store fixed earlier at 1.2MB scale. Hydrated below when
+  // a query actually references them, and by the filter menu when it opens.
+  const categories = isOwnGroup.value
+    ? useCategoryStore(undefined, { lazy: true })
+    : usePublicCategoryStore(groupSlug.value, undefined, { lazy: true });
   const foods = isOwnGroup.value
     ? useFoodStore(undefined, { lazy: true })
     : usePublicFoodStore(groupSlug.value, undefined, { lazy: true });
-  const households = isOwnGroup.value ? useHouseholdStore() : usePublicHouseholdStore(groupSlug.value);
-  const tags = isOwnGroup.value ? useTagStore() : usePublicTagStore(groupSlug.value);
-  const tools = isOwnGroup.value ? useToolStore() : usePublicToolStore(groupSlug.value);
+  const households = isOwnGroup.value
+    ? useHouseholdStore(undefined, { lazy: true })
+    : usePublicHouseholdStore(groupSlug.value, undefined, { lazy: true });
+  const tags = isOwnGroup.value
+    ? useTagStore(undefined, { lazy: true })
+    : usePublicTagStore(groupSlug.value, undefined, { lazy: true });
+  const tools = isOwnGroup.value
+    ? useToolStore(undefined, { lazy: true })
+    : usePublicToolStore(groupSlug.value, undefined, { lazy: true });
 
   // Selected items
   const selectedCategories = ref<NoUndefinedField<RecipeCategory>[]>([]);
@@ -298,6 +307,8 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
     const promises: Promise<void>[] = [];
 
     if (query.categories?.length) {
+      // Lazy store: hydrate or the wait below never resolves (the foods lesson, same line).
+      categories.actions.hydrate();
       promises.push(
         waitUntilAndExecute(
           () => categories.store.value.length > 0,
@@ -315,6 +326,7 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
     }
 
     if (query.tags?.length) {
+      tags.actions.hydrate();
       promises.push(
         waitUntilAndExecute(
           () => tags.store.value.length > 0,
@@ -330,6 +342,7 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
     }
 
     if (query.tools?.length) {
+      tools.actions.hydrate();
       promises.push(
         waitUntilAndExecute(
           () => tools.store.value.length > 0,
@@ -368,6 +381,7 @@ function createRecipeExplorerSearchState(groupSlug: ComputedRef<string>): Recipe
     }
 
     if (query.households?.length) {
+      households.actions.hydrate();
       promises.push(
         waitUntilAndExecute(
           () => {

@@ -8,6 +8,7 @@
       <v-avatar
         v-if="list"
         v-bind="tooltipProps"
+        @mouseenter="hydrateForTooltip"
       >
         <v-img
           :src="imageURL"
@@ -20,6 +21,7 @@
         v-else
         :size="size"
         v-bind="tooltipProps"
+        @mouseenter="hydrateForTooltip"
       >
         <v-img
           :src="imageURL"
@@ -60,10 +62,20 @@ const props = defineProps({
 const error = ref(false);
 
 const auth = useMealieAuth();
-const { store: users } = useUserStore();
+// Lazy: the image renders from a direct URL; the store exists ONLY to put a full name in the
+// tooltip. Constructed eagerly, every avatar (including the sidebar's, which disables the
+// tooltip entirely) fetched the whole member list on every installed-app cold launch. First
+// hover hydrates it, exactly when a tooltip could be shown.
+const { store: users, actions: userActions } = useUserStore(undefined, { lazy: true });
 const user = computed(() => {
   return users.value.find(user => user.id === props.userId);
 });
+
+function hydrateForTooltip() {
+  if (props.tooltip) {
+    userActions.hydrate();
+  }
+}
 
 const imageURL = computed(() => {
   // Note: auth.user is a ref now

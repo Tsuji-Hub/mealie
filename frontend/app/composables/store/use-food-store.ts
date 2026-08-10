@@ -27,10 +27,11 @@ export const useFoodData = function () {
   });
 };
 
-// Foods is the only store big enough to matter: 2687 rows, 1.2 MB, ~1.3 s. Pass
-// `{ lazy: true }` where you only need a reference to the store and not its rows, then call
-// `actions.hydrate()` at the point the rows are actually shown. Categories/tags/tools are
-// 47-64 ms and stay eager.
+// Foods was the first store to go lazy (2687 rows, 1.2 MB, ~1.3 s). Pass `{ lazy: true }`
+// where you only need a reference to the store and not its rows, then call
+// `actions.hydrate()` at the point the rows are actually shown. The rest of the organizer
+// stores followed on 2026-08-10: "47-64 ms and stay eager" was a LAN number for a warm tab —
+// the installed PWA cold-starts every launch and paid all six unbounded fetches every time.
 export const useFoodStore = function (i18n?: Composer, options: StoreOptions = {}) {
   const api = useUserApi(i18n);
   return useStore<IngredientFood>("food", store, loading, initialized, api.foods, {}, options);

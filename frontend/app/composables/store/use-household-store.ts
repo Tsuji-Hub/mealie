@@ -1,5 +1,6 @@
 import type { Composer } from "vue-i18n";
 import { useReadOnlyStore } from "../partials/use-store-factory";
+import type { StoreOptions } from "../partials/use-store-factory";
 import type { HouseholdSummary } from "~/lib/api/types/household";
 import { usePublicExploreApi, useUserApi } from "~/composables/api";
 
@@ -17,12 +18,14 @@ export function resetHouseholdStore() {
   publicInitialized.value = false;
 }
 
-export const useHouseholdStore = function (i18n?: Composer) {
+// Fork: `options.lazy` supported — launch-path callers defer the unbounded perPage=-1 fetch
+// until the rows are actually shown (see use-category-store for the full story).
+export const useHouseholdStore = function (i18n?: Composer, options: StoreOptions = {}) {
   const api = useUserApi(i18n);
-  return useReadOnlyStore<HouseholdSummary>("household", store, loading, initialized, api.households);
+  return useReadOnlyStore<HouseholdSummary>("household", store, loading, initialized, api.households, {}, options);
 };
 
-export const usePublicHouseholdStore = function (groupSlug: string, i18n?: Composer) {
+export const usePublicHouseholdStore = function (groupSlug: string, i18n?: Composer, options: StoreOptions = {}) {
   const api = usePublicExploreApi(groupSlug, i18n).explore;
-  return useReadOnlyStore<HouseholdSummary>("household-public", store, publicLoading, publicInitialized, api.households);
+  return useReadOnlyStore<HouseholdSummary>("household-public", store, publicLoading, publicInitialized, api.households, {}, options);
 };

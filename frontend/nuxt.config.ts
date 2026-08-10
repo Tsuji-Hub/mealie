@@ -246,7 +246,11 @@ export default defineNuxtConfig({
       // they are immutable-by-URL, so runtime CacheFirst below caches them on first use
       // instead, and a deploy only costs the chunks a page actually loads.
       globPatterns: ["**/*.{css,html,png,svg,ico}"],
-      globIgnores: ["404.html", "200.html", "index.html"],
+      // index.html MUST stay in the precache: it is what navigateFallback above serves. With it
+      // ignored, every standalone-PWA launch navigation fell through to the network and the
+      // server 404'd /g/* (it has no SPA routes) — a full remote round trip on the critical
+      // path of every launch, and a broken app offline. 404/200.html are duplicate shells.
+      globIgnores: ["404.html", "200.html"],
       runtimeCaching: [
         {
           urlPattern: /\/_nuxt\/.*\.(?:js|mjs|css|woff2?)$/,

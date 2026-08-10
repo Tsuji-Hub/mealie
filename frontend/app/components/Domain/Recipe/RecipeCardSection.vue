@@ -431,8 +431,10 @@ async function initRecipes() {
   }
 }
 
-const infiniteScroll = useThrottleFn(async () => {
-  if (!hasMore.value || loading.value) {
+// v-intersect invokes its handler on MOUNT as well as on real intersection changes — ignoring
+// the isIntersecting flag made every grid mount fire an unasked-for page-3 fetch at launch.
+const infiniteScroll = useThrottleFn(async (isIntersecting: boolean = true) => {
+  if (!isIntersecting || !hasMore.value || loading.value) {
     return;
   }
 

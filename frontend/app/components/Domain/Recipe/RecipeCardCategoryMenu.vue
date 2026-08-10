@@ -3,6 +3,7 @@
     :close-on-content-click="false"
     location="bottom start"
     offset="6"
+    @update:model-value="(open: boolean) => open && categoryActions.hydrate()"
   >
     <template #activator="{ props: menuProps }">
       <slot name="activator" :props="menuProps" />
@@ -68,7 +69,10 @@ const emit = defineEmits<{ "category-removed": [category: RecipeCategory] }>();
 const model = defineModel<RecipeCategory[]>({ required: true });
 
 const api = useUserApi();
-const { store: allCategories } = useCategoryStore();
+// Lazy: this menu sits on EVERY card, so an eager store construction fired the unbounded
+// category fetch during grid mount on every installed-app cold launch. The menu's own
+// @update:model-value hydrates it on first open — the only moment the rows are shown.
+const { store: allCategories, actions: categoryActions } = useCategoryStore(undefined, { lazy: true });
 const { actions: cookbookActions } = useCookbookStore();
 
 function isChecked(cat: RecipeCategory): boolean {

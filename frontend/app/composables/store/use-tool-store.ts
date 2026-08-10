@@ -1,5 +1,6 @@
 import type { Composer } from "vue-i18n";
 import { useData, useReadOnlyStore, useStore } from "../partials/use-store-factory";
+import type { StoreOptions } from "../partials/use-store-factory";
 import type { RecipeTool } from "~/lib/api/types/recipe";
 import { usePublicExploreApi, useUserApi } from "~/composables/api";
 
@@ -31,12 +32,14 @@ export const useToolData = function () {
   });
 };
 
-export const useToolStore = function (i18n?: Composer) {
+// Fork: `options.lazy` supported — launch-path callers defer the unbounded perPage=-1 fetch
+// until the rows are actually shown (see use-category-store for the full story).
+export const useToolStore = function (i18n?: Composer, options: StoreOptions = {}) {
   const api = useUserApi(i18n);
-  return useStore<RecipeTool>("tool", store, loading, initialized, api.tools);
+  return useStore<RecipeTool>("tool", store, loading, initialized, api.tools, {}, options);
 };
 
-export const usePublicToolStore = function (groupSlug: string, i18n?: Composer) {
+export const usePublicToolStore = function (groupSlug: string, i18n?: Composer, options: StoreOptions = {}) {
   const api = usePublicExploreApi(groupSlug, i18n).explore;
-  return useReadOnlyStore<RecipeTool>("tool", store, publicLoading, publicInitialized, api.tools);
+  return useReadOnlyStore<RecipeTool>("tool", store, publicLoading, publicInitialized, api.tools, {}, options);
 };
