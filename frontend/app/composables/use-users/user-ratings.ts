@@ -44,6 +44,21 @@ export const useUserSelfRatings = function () {
     refreshUserRatings();
   }
 
+  // Fork: refreshUserRatings no-ops while the session is still resolving (auth.user is null on
+  // a PWA cold start straight onto a recipe page — the share-target flow), and nothing ever
+  // retried. Ratings then stayed empty for the whole visit: the rating widget read 0 against a
+  // persisted rating, so a tap on the current star re-SET it instead of clearing. Watch the
+  // session in and load once; the watcher disposes with the calling component, and `ready`
+  // makes every later firing a no-op.
+  watch(
+    () => auth.user.value,
+    (user) => {
+      if (user && !ready.value) {
+        refreshUserRatings();
+      }
+    },
+  );
+
   return {
     userRatings,
     refreshUserRatings,

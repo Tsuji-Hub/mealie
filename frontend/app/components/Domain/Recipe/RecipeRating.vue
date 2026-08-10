@@ -6,16 +6,21 @@
          nothing ever said rating existed) and effectively impossible on touch (isHovering
          comes from mouseenter, which a PWA tap fires flakily at best). An empty interactive
          row IS the affordance: five hollow stars in the accent color read as "rate this". -->
+    <!-- `?? 0`, never undefined: VRating's modelValue prop defaults to 0, so binding undefined
+         (ratings not loaded yet / no rating) silently swaps in the default while the widget is
+         in "controlled" mode — the live model then disagrees with what the user believes is
+         set, and a tap on the current star re-sets instead of clearing (0 === 4 is false).
+         Gold stars, not theme secondary: maroon filled stars read as decoration, not a rating. -->
     <v-rating
       v-if="isOwnGroup"
-      :model-value="userRating"
-      active-color="secondary"
-      color="secondary-lighten-3"
+      :model-value="userRating ?? 0"
+      active-color="amber-darken-1"
+      color="grey-lighten-1"
       length="5"
       half-increments
       :density="small ? 'compact' : 'default'"
       :size="small ? 'x-small' : undefined"
-      hover
+      :hover="hoverCapable"
       clearable
       @update:model-value="updateRating(+$event)"
     />
@@ -26,8 +31,8 @@
       v-else
       :model-value="groupRating"
       :half-increments="true"
-      active-color="grey-darken-1"
-      color="secondary-lighten-3"
+      active-color="amber-darken-1"
+      color="grey-lighten-1"
       length="5"
       :density="small ? 'compact' : 'default'"
       :size="small ? 'x-small' : undefined"
@@ -58,6 +63,13 @@ const modelValue = defineModel<number>({ default: 0 });
 
 const { isOwnGroup } = useLoggedInState();
 const { userRatings, setRating } = useUserSelfRatings();
+
+// Hover preview only where hover actually exists. On touch, a tap fires mouseenter but
+// mouseleave never comes, so VRating's hoverIndex sticks on the tapped star and the DISPLAY
+// follows the hover ghost instead of the model (`isHovering ? isHovered : isFilled`). A
+// successful clear then still LOOKS filled — the user re-taps and re-sets the rating they
+// just cleared. Confirmed live on the Fold: model-value 0 while four stars rendered filled.
+const hoverCapable = typeof window !== "undefined" && !!window.matchMedia?.("(hover: hover)").matches;
 
 const userRating = computed(() => {
   return userRatings.value.find(r => r.recipeId === props.recipeId)?.rating ?? undefined;

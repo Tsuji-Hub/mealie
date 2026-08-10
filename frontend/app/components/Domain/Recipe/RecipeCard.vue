@@ -348,7 +348,8 @@ const servingsLabel = computed(() =>
   color: rgba(244, 239, 232, 0.85);
 }
 .fork-tile__rate--rated .fork-tile__rate-star {
-  color: rgb(var(--v-theme-secondary));
+  /* Gold, matching the recipe-page stars — the theme secondary (maroon) read as decoration. */
+  color: #ffb300;
 }
 
 /* Narrow (2-up phone) cards: shrink the badges so the category name + calories

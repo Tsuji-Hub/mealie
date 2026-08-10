@@ -6,7 +6,7 @@
       class="star"
       :class="{
         'star-half': star === 'half',
-        'text-secondary': !useGroupStyle,
+        'text-amber-darken-1': !useGroupStyle,
         'text-grey-darken-1': useGroupStyle,
       }"
     >

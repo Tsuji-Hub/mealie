@@ -117,6 +117,70 @@ describe("rating updates", () => {
   });
 });
 
+describe("model seeding — the clear-on-retap regression (found live 2026-08-10)", () => {
+  test("THE BUG: persisted userRating=4 seeds the widget model on mount, not 0", () => {
+    // Binding `undefined` let VRating's modelValue prop default (0) take over while the widget
+    // was controlled: live model 0 against a persisted 4, so tapping the 4th star computed
+    // 0 === 4 -> false and RE-SET the rating instead of clearing it.
+    userRatings.value = [{ recipeId: "r1", rating: 4 }];
+    const wrapper = build();
+    expect(wrapper.findComponent({ name: "VRating" }).props("modelValue")).toBe(4);
+  });
+
+  test("the ratings GET resolving after mount still seeds the model", async () => {
+    // Cold-starting the PWA straight onto a recipe page loads ratings asynchronously — the
+    // widget must pick the value up when it lands, not only at setup.
+    const wrapper = build();
+    const rating = wrapper.findComponent({ name: "VRating" });
+    expect(rating.props("modelValue")).toBe(0);
+    userRatings.value = [{ recipeId: "r1", rating: 4 }];
+    await wrapper.vm.$nextTick();
+    expect(rating.props("modelValue")).toBe(4);
+  });
+});
+
+describe("star colors — gold, not theme maroon", () => {
+  test("filled stars resolve to the amber token, not `secondary`", () => {
+    userRatings.value = [{ recipeId: "r1", rating: 4 }];
+    const wrapper = build();
+    expect(wrapper.findComponent({ name: "VRating" }).props("activeColor")).toBe("amber-darken-1");
+    const buttons = wrapper.findAll(".v-rating .v-btn");
+    expect(buttons.filter(b => b.classes().includes("text-amber-darken-1")).length).toBeGreaterThan(0);
+    expect(buttons.filter(b => b.classes().includes("text-secondary")).length).toBe(0);
+  });
+
+  test("the readonly group row is gold too", () => {
+    isOwnGroup.value = false;
+    const wrapper = build({}, 3.5);
+    expect(wrapper.findComponent({ name: "VRating" }).props("activeColor")).toBe("amber-darken-1");
+  });
+});
+
+describe("hover ghost — hover preview only on hover-capable pointers", () => {
+  test("touch: hover is off, so the display follows the model instead of a stuck mouseenter", () => {
+    // jsdom is hover-incapable (matchMedia matches false), which IS the touch path. On touch,
+    // tap fires mouseenter but never mouseleave, so VRating's hoverIndex sticks and the display
+    // shows the ghost instead of the model — a successful clear still LOOKED filled.
+    const wrapper = build();
+    expect(wrapper.findComponent({ name: "VRating" }).props("hover")).toBe(false);
+  });
+
+  test("hover-capable pointers keep the hover preview", () => {
+    const original = window.matchMedia;
+    Object.defineProperty(window, "matchMedia", {
+      value: (query: string) => ({ matches: query === "(hover: hover)" }),
+      configurable: true,
+    });
+    try {
+      const wrapper = build();
+      expect(wrapper.findComponent({ name: "VRating" }).props("hover")).toBe(true);
+    }
+    finally {
+      Object.defineProperty(window, "matchMedia", { value: original, configurable: true });
+    }
+  });
+});
+
 describe("hideGroupRating — unsetting must not fall back to the stale group value", () => {
   test("once a user rating exists, the group value is suppressed", async () => {
     userRatings.value = [{ recipeId: "r1", rating: 4 }];
