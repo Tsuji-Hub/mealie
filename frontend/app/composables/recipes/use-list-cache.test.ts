@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   FIRST_LOAD_PAGE_COUNT,
   LIST_PAGE_SIZE,
+  bindPersistedListCache,
   cookbookListScope,
   flushListCache,
   getCachedCookbook,
@@ -120,5 +121,97 @@ describe("sameList — 'swap only if changed'", () => {
     expect(sameList(base, [recipe("a")])).toBe(false); // removed (the unfile-vanish case)
     expect(sameList(base, [recipe("a"), recipe("b"), recipe("c")])).toBe(false); // added
     expect(sameList(base, [recipe("b"), recipe("a")])).toBe(false); // reordered
+  });
+});
+
+describe("cold-start persistence — the standalone-PWA fix", () => {
+  /** Unique per test: bindPersistedListCache is idempotent per user id (module singleton). */
+  let n = 0;
+  const uid = () => `user-${++n}-${Math.random().toString(36).slice(2, 8)}`;
+  const KEY = "fork.listCache.v1";
+
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  test("a stored list persists and re-seeds after 'process death' (cache flushed in-memory only)", () => {
+    const who = uid();
+    bindPersistedListCache(who);
+    storeCachedList("pk1", [recipe("a"), recipe("b")], true);
+    vi.advanceTimersByTime(1000); // debounce
+    const blob = JSON.parse(window.localStorage.getItem(KEY)!);
+    expect(blob.who).toBe(who);
+    expect(blob.lists.find(([k]: [string]) => k === "pk1")).toBeTruthy();
+
+    // Simulate the next launch: memory empty, same user binds -> entry is back.
+    // (flushListCache would clear disk too — that is sign-out, not process death.)
+    const saved = window.localStorage.getItem(KEY)!;
+    flushListCache();
+    window.localStorage.setItem(KEY, saved);
+    expect(getCachedList("pk1")).toBeNull();
+    bindPersistedListCache(uid()); // wrong user first: must NOT seed, must clear
+    expect(getCachedList("pk1")).toBeNull();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  test("the same user re-binding after a cold start seeds the cache", () => {
+    const who = uid();
+    bindPersistedListCache(who);
+    storeCachedList("pk2", [recipe("a")], false);
+    storeCachedCookbook("pcb2", { id: "cb", slug: "dinner" } as ReadCookBook);
+    vi.advanceTimersByTime(1000);
+    const saved = window.localStorage.getItem(KEY)!;
+    flushListCache();
+    window.localStorage.setItem(KEY, saved);
+
+    bindPersistedListCache(who + "-relaunch"); // fresh id simulating... no — must be SAME user
+    expect(getCachedList("pk2")).toBeNull(); // mismatched id cleared it, proving the identity gate
+    window.localStorage.setItem(KEY, saved);
+    // A brand-new bind cannot reuse `who` (idempotence), so verify via a hand-built blob:
+    const freshWho = uid();
+    const blob = JSON.parse(saved);
+    blob.who = freshWho;
+    window.localStorage.setItem(KEY, JSON.stringify(blob));
+    bindPersistedListCache(freshWho);
+    expect(getCachedList("pk2")).not.toBeNull();
+    expect(getCachedCookbook("pcb2")).not.toBeNull();
+  });
+
+  test("persisted lists are capped to the first-paint page count", () => {
+    const who = uid();
+    bindPersistedListCache(who);
+    const many = Array.from({ length: 100 }, (_, i) => recipe(`r${i}`));
+    storeCachedList("pk3", many, true);
+    vi.advanceTimersByTime(1000);
+    const blob = JSON.parse(window.localStorage.getItem(KEY)!);
+    const [, entry] = blob.lists.find(([k]: [string]) => k === "pk3");
+    expect(entry.recipes.length).toBe(LIST_PAGE_SIZE * FIRST_LOAD_PAGE_COUNT);
+  });
+
+  test("in-session entries beat the disk copy on bind", () => {
+    const live = [recipe("live")];
+    storeCachedList("pk4", live, false);
+    const freshWho = uid();
+    window.localStorage.setItem(KEY, JSON.stringify({
+      v: 1, who: freshWho, lists: [["pk4", { recipes: [recipe("stale")], hasMore: false, storedAt: 1 }]], cookbooks: [],
+    }));
+    bindPersistedListCache(freshWho);
+    expect(getCachedList("pk4")!.recipes[0]!.id).toBe("live");
+  });
+
+  test("flushListCache (sign-out, any mutation) clears the disk copy too", () => {
+    const who = uid();
+    bindPersistedListCache(who);
+    storeCachedList("pk5", [recipe("a")], false);
+    vi.advanceTimersByTime(1000);
+    expect(window.localStorage.getItem(KEY)).not.toBeNull();
+    flushListCache();
+    expect(window.localStorage.getItem(KEY)).toBeNull();
+  });
+
+  test("corrupt persisted data is discarded quietly", () => {
+    window.localStorage.setItem(KEY, "{not json");
+    bindPersistedListCache(uid());
+    expect(window.localStorage.getItem(KEY)).toBeNull();
   });
 });

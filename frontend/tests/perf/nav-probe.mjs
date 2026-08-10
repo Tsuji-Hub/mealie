@@ -116,6 +116,88 @@ export async function navProbe({ routes = null, settleMs = 2500 } = {}) {
 }
 
 /**
+ * Standalone (installed PWA) cold-start probe — the configuration that was invisible to every
+ * measurement before 2026-08-10. The installed app cold-starts a fresh renderer per launch, so
+ * module-scoped caches begin empty: pre-fix the drawer's cookbook links appeared at ~1,070ms
+ * and the first cookbook tap paid skeletons until ~1,030ms with a 345ms grid-mount long task
+ * (all measured over CDP on the real WebappActivity on the Fold — display-mode EMULATION does
+ * not reproduce this; attach to the real installed app).
+ *
+ * Run over CDP as soon after a force-stopped cold launch as possible, from /g/home:
+ *   await standaloneColdProbe()
+ *
+ * Budgets assume the persisted-warmth fix (localStorage-seeded SWR list cache + cookbook
+ * store): drawer links paint once the session resolves, and a persisted-cache tap goes
+ * straight to cards — a skeletons phase on a repeat visit means the persistence regressed.
+ * The 400ms long-task budget is honest, not aspirational: the 64-card grid mount measures
+ * ~345ms on Fold silicon; getting under the navProbe 200ms needs virtualization, out of scope.
+ */
+const STANDALONE_BUDGETS = { drawerLinksMs: 1200, tapCardsMs: 800, tapLongTaskMs: 400 };
+
+export async function standaloneColdProbe({ settleMs = 3500 } = {}) {
+  if (!matchMedia("(display-mode: standalone)").matches) {
+    throw new Error("Not in standalone display mode — this probe must run in the INSTALLED app, not a tab.");
+  }
+  if (document.visibilityState !== "visible") {
+    throw new Error("App is backgrounded — foreground it first.");
+  }
+
+  // Phase 1: how long until the drawer has cookbook links (persisted warmth => with first
+  // paint). Reported as absolute performance.now() — time since the launch navigation started.
+  const linkSelector = ".v-navigation-drawer a[href*='/cookbooks/']";
+  const drawerLinksMs = await new Promise((resolve) => {
+    if (document.querySelector(linkSelector)) return resolve(Math.round(performance.now()));
+    const mo = new MutationObserver(() => {
+      if (document.querySelector(linkSelector)) {
+        mo.disconnect();
+        resolve(Math.round(performance.now()));
+      }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => { mo.disconnect(); resolve(null); }, 20000);
+  });
+
+  // Phase 2: first cookbook tap — straight to cards, no skeleton phase, bounded long task.
+  const link = document.querySelector(linkSelector);
+  if (!link) throw new Error("No cookbook link ever appeared in the drawer.");
+  const timeline = [];
+  const longTasks = [];
+  const tapT0 = performance.now();
+  const po = new PerformanceObserver(list => longTasks.push(...list.getEntries().map(e => Math.round(e.duration))));
+  po.observe({ entryTypes: ["longtask"] });
+  let last = "";
+  const classify = () => {
+    const cards = document.querySelectorAll(".fork-tile").length;
+    const skels = document.querySelectorAll(".fork-skel").length;
+    const state = cards > 0 ? `cards(${cards})` : skels > 0 ? "skeletons" : "other";
+    if (state !== last) { timeline.push({ t: Math.round(performance.now() - tapT0), state }); last = state; }
+  };
+  const mo = new MutationObserver(classify);
+  mo.observe(document.body, { childList: true, subtree: true });
+  classify();
+  link.click();
+  await new Promise(r => setTimeout(r, settleMs));
+  mo.disconnect();
+  po.disconnect();
+
+  const firstCards = timeline.find(s => s.state.startsWith("cards"));
+  const sawSkeletons = timeline.some(s => s.state === "skeletons");
+  const worstTask = Math.max(0, ...longTasks);
+  const result = {
+    budgets: STANDALONE_BUDGETS,
+    drawerLinksMs,
+    tap: { timeline, cardsMs: firstCards?.t ?? null, sawSkeletons, worstLongTaskMs: worstTask },
+    pass:
+      drawerLinksMs != null && drawerLinksMs < STANDALONE_BUDGETS.drawerLinksMs
+      && firstCards != null && firstCards.t < STANDALONE_BUDGETS.tapCardsMs
+      && !sawSkeletons
+      && worstTask < STANDALONE_BUDGETS.tapLongTaskMs,
+  };
+  console.table([{ drawerLinksMs, cardsMs: result.tap.cardsMs, sawSkeletons, worstLongTaskMs: worstTask, pass: result.pass }]);
+  return result;
+}
+
+/**
  * Recipe-page entry + teardown probe. Run from /g/home, logged in:  await recipeProbe()
  * Measures click -> recipe hero visible (entry, with worst long task), then history.back()
  * -> grid cards visible again (the teardown gap, with worst long task). Same rules as

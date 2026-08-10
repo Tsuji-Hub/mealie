@@ -105,7 +105,8 @@ import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { SideBarLink } from "~/types/application-types";
 import { useGroupSelf } from "~/composables/use-groups";
 import { useCookbookPreferences } from "~/composables/use-users/preferences";
-import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
+import { bindPersistedCookbooks, useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
+import { bindPersistedListCache } from "~/composables/recipes/use-list-cache";
 import type { ReadCookBook } from "~/lib/api/types/cookbook";
 
 const i18n = useI18n();
@@ -117,6 +118,22 @@ const { group } = useGroupSelf();
 
 const route = useRoute();
 const groupSlug = computed(() => route.params.groupSlug as string || auth.user.value?.groupSlug || "");
+
+// Fork: the installed PWA cold-starts a fresh renderer every launch, so the module-scoped
+// SWR list cache and cookbook store begin empty — the drawer's cookbook section appeared at
+// ~1.07s and the first cookbook tap paid a full skeleton+fetch second (measured on-device,
+// standalone). Both persist their last-known state to localStorage; hydration is gated on the
+// session identifying the SAME user, which is what this watcher provides.
+watch(
+  () => auth.user.value?.id,
+  (id) => {
+    if (id) {
+      bindPersistedListCache(id);
+      bindPersistedCookbooks(id);
+    }
+  },
+  { immediate: true },
+);
 
 const cookbookPreferences = useCookbookPreferences();
 const ownCookbookStore = computed(() => isOwnGroup.value ? useCookbookStore(i18n) : null);

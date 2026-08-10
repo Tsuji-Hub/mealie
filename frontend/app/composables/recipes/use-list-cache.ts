@@ -36,6 +36,92 @@ const PREFETCH_FRESH_MS = 30_000;
 const listCache = new Map<string, CachedList>();
 const cookbookCache = new Map<string, ReadCookBook>();
 
+/** =============================================================
+ * Cold-start persistence — the standalone-PWA fix (measured 2026-08-10).
+ *
+ * The installed PWA cold-starts a fresh renderer on every launch, so this module-scoped cache
+ * begins EMPTY every single time — the first cookbook tap always paid skeletons + fetch + full
+ * grid mount (~1.0s to cards on the Fold, with a 345ms long task), while a long-lived browser
+ * tab kept everything warm. Chunks and SW boot were measured innocent (all cache-served,
+ * workerStart ~3ms); the missing warmth was THIS map. So the last-known first page of each
+ * list persists to localStorage and re-seeds the cache on the next launch: a cold tap paints
+ * stale cards instantly and the existing revalidate path corrects them — the SWR contract,
+ * now surviving process death.
+ *
+ * Identity rule: NOTHING hydrates until bindPersistedListCache(userId) confirms the persisted
+ * blob belongs to the CURRENT user — a mismatch (account switch without a clean logout) clears
+ * the disk copy instead of seeding. Sign-out clears it via flushListCache.
+ */
+const PERSIST_VERSION = 1;
+const PERSIST_KEY = "fork.listCache.v1";
+const PERSIST_MAX_LISTS = 6;
+const PERSIST_DEBOUNCE_MS = 800;
+
+let boundUserId: string | null = null;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function persistSoon(): void {
+  if (!boundUserId || typeof window === "undefined") {
+    return;
+  }
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+  }
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    try {
+      const lists = [...listCache.entries()]
+        .slice(-PERSIST_MAX_LISTS)
+        .map(([key, value]) => [key, { ...value, recipes: value.recipes.slice(0, LIST_PAGE_SIZE * FIRST_LOAD_PAGE_COUNT) }]);
+      const cookbooks = [...cookbookCache.entries()];
+      window.localStorage.setItem(PERSIST_KEY, JSON.stringify({ v: PERSIST_VERSION, who: boundUserId, lists, cookbooks }));
+    }
+    catch {
+      // Quota or privacy mode — a cache that cannot persist is still a working cache.
+      try {
+        window.localStorage.removeItem(PERSIST_KEY);
+      }
+      catch { /* nothing left to do */ }
+    }
+  }, PERSIST_DEBOUNCE_MS);
+}
+
+/** Hydrate the cache from disk once the session says who is logged in. Safe to call often. */
+export function bindPersistedListCache(userId: string): void {
+  if (typeof window === "undefined" || !userId || boundUserId === userId) {
+    return;
+  }
+  boundUserId = userId;
+  try {
+    const raw = window.localStorage.getItem(PERSIST_KEY);
+    if (!raw) {
+      return;
+    }
+    const blob = JSON.parse(raw) as { v: number; who: string; lists?: [string, CachedList][]; cookbooks?: [string, ReadCookBook][] };
+    if (blob?.v !== PERSIST_VERSION || blob.who !== userId) {
+      window.localStorage.removeItem(PERSIST_KEY);
+      return;
+    }
+    // In-session entries always beat the disk copy — never overwrite live data with stale.
+    for (const [key, value] of blob.lists ?? []) {
+      if (!listCache.has(key)) {
+        listCache.set(key, value);
+      }
+    }
+    for (const [key, value] of blob.cookbooks ?? []) {
+      if (!cookbookCache.has(key)) {
+        cookbookCache.set(key, value);
+      }
+    }
+  }
+  catch {
+    try {
+      window.localStorage.removeItem(PERSIST_KEY);
+    }
+    catch { /* nothing left to do */ }
+  }
+}
+
 /** The exact parameters a list fetch resolves to — one shape shared by page and prefetch. */
 export interface ResolvedListParams {
   orderBy: string | null;
@@ -128,6 +214,7 @@ export function storeCachedList(key: string, recipes: Recipe[], hasMore: boolean
     }
     listCache.delete(oldest);
   }
+  persistSoon();
 }
 
 export function isListFresh(key: string): boolean {
@@ -144,6 +231,16 @@ export function isListFresh(key: string): boolean {
 export function flushListCache(): void {
   listCache.clear();
   cookbookCache.clear();
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(PERSIST_KEY);
+    }
+    catch { /* nothing left to do */ }
+  }
 }
 
 export function getCachedCookbook(key: string): ReadCookBook | null {
@@ -160,6 +257,7 @@ export function storeCachedCookbook(key: string, cookbook: ReadCookBook): void {
     }
     cookbookCache.delete(oldest);
   }
+  persistSoon();
 }
 
 export function cookbookCacheKey(groupScope: string, slugOrId: string | number): string {
