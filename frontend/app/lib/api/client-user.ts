@@ -25,6 +25,7 @@ import { GroupEventNotifierApi } from "./user/group-event-notifier";
 import { MealPlanRulesApi } from "./user/group-mealplan-rules";
 import { GroupDataSeederApi } from "./user/group-seeder";
 import { AIProvidersAPI } from "./user/group-ai-providers";
+import { AnyListAPI } from "./user/household-anylist";
 import type { ApiRequestInstance } from "~/lib/api/types/non-generated";
 
 export class UserApiClient {
@@ -55,6 +56,7 @@ export class UserApiClient {
   public upload: UploadFile;
   public seeders: GroupDataSeederApi;
   public aiProviders: AIProvidersAPI;
+  public anylist: AnyListAPI;
 
   constructor(requests: ApiRequestInstance) {
     // Recipes
@@ -83,6 +85,7 @@ export class UserApiClient {
     this.multiPurposeLabels = new MultiPurposeLabelsApi(requests);
     this.seeders = new GroupDataSeederApi(requests);
     this.aiProviders = new AIProvidersAPI(requests);
+    this.anylist = new AnyListAPI(requests);
 
     // Admin
     this.backups = new BackupAPI(requests);

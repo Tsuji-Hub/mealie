@@ -66,6 +66,25 @@
         {{ $t("general.share") }}
       </v-btn>
 
+      <!-- Fork: scaled ingredient lines → Mom's shared AnyList. Renders ONLY after the
+           idle probe confirms the backend has a bridge configured — zero UI residue on
+           installs without one. -->
+      <v-btn
+        v-if="isOwnGroup && anylistAvailable"
+        class="fork-btn"
+        variant="outlined"
+        :prepend-icon="$globals.icons.formatListCheck"
+        @click="anylistOpen = true"
+      >
+        Send to AnyList
+      </v-btn>
+      <RecipeAnyListSheet
+        v-if="isOwnGroup && anylistAvailable"
+        v-model="anylistOpen"
+        :recipe="recipe"
+        :scale="scale"
+      />
+
       <!-- Same quick-categorize control as the grid cards. REUSES RecipeCardCategoryMenu on
            purpose: its additive read-modify-write is wire-verified ([Dinner] + X ->
            [Dinner, X]). A second implementation is where a destructive overwrite would
@@ -148,6 +167,8 @@
 <script setup lang="ts">
 import { useClipboard, useShare } from "@vueuse/core";
 import RecipeCardCategoryMenu from "~/components/Domain/Recipe/RecipeCardCategoryMenu.vue";
+import RecipeAnyListSheet from "~/components/Domain/Recipe/RecipeAnyListSheet.vue";
+import { useAnyList } from "~/composables/recipes/use-anylist";
 import { useUserApi } from "~/composables/api";
 import { usePageState } from "~/composables/recipe-page/shared-state";
 import { getMacroCells, hasMacros } from "~/composables/recipes/use-macro-summary";
@@ -172,6 +193,16 @@ const auth = useMealieAuth();
 const { group } = useGroupSelf();
 const { isOwnGroup } = useLoggedInState();
 const { isCookMode, isEditMode, toggleCookMode } = usePageState(props.recipe.slug);
+
+// Fork: Send-to-AnyList. The availability probe fires once per session at idle (off the
+// launch critical path); until it confirms, the button does not exist.
+const { available: anylistAvailable, probeAtIdle } = useAnyList();
+const anylistOpen = ref(false);
+onMounted(() => {
+  if (isOwnGroup.value) {
+    probeAtIdle();
+  }
+});
 
 // Local copy so the menu can update optimistically without refetching the recipe;
 // re-syncs if the page reloads the recipe.

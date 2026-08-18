@@ -259,6 +259,14 @@ class AppSettings(AppLoggingSettings):
     """
 
     # ===============================================
+    # Fork: AnyList bridge
+
+    ANYLIST_BRIDGE_URL: str | None = None
+    """Fork: base URL of the LAN-internal AnyList bridge (kevdliu's anylist server run as a
+    standalone container). Unset disables the whole Send-to-AnyList feature: the routes 404
+    and the frontend hides its UI. Credentials live ONLY in the bridge's own env — never here."""
+
+    # ===============================================
     # Email Configuration
 
     SMTP_HOST: str | None = None
