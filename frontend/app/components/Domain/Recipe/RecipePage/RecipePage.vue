@@ -197,6 +197,9 @@
     >
       <v-icon>{{ $globals.icons.close }}</v-icon>
     </v-btn>
+    <!-- Fork: running step timers stay visible at the bottom of cook mode while reading
+         other steps. Session-only state; cleared in this page's onUnmounted. -->
+    <RecipeActiveTimersStrip v-if="isCookMode" :slug="recipe.slug" />
   </div>
 </template>
 
@@ -233,6 +236,8 @@ import { useNavigationWarning } from "~/composables/use-navigation-warning";
 import { cookbookForCategory, organizerRoute } from "~/composables/cookbooks/use-cookbook-scope";
 import { useCookbookStore, usePublicCookbookStore } from "~/composables/store/use-cookbook-store";
 import { useCookbookPrefetch } from "~/composables/recipes/use-list-prefetch";
+import { clearStepTimers } from "~/composables/recipes/use-step-timers";
+import RecipeActiveTimersStrip from "~/components/Domain/Recipe/RecipeActiveTimersStrip.vue";
 
 const recipe = defineModel<NoUndefinedField<Recipe>>({ required: true });
 
@@ -324,6 +329,8 @@ onUnmounted(() => {
   deactivateNavigationWarning();
   toggleCookMode();
   clearPageState(recipe.value.slug || "");
+  // Fork: step timers are per-recipe-session state — leaving the recipe kills them.
+  clearStepTimers(recipe.value.slug || "");
 });
 const hasLinkedIngredients = computed(() => {
   return recipe.value.recipeInstructions.some(

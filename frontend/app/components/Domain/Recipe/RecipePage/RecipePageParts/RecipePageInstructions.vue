@@ -361,6 +361,16 @@
                           class="markdown"
                           :source="step.text"
                         />
+                        <!-- Fork: one-tap timers for durations found in the step text
+                             ("simmer 15 minutes"). Rendered as real components after the
+                             text block — SafeMarkdown's v-html cannot host live components
+                             inline. Timer durations deliberately ignore the scale chips:
+                             half a batch does not simmer for half the time. -->
+                        <RecipeStepTimerChips
+                          :step-text="step.text"
+                          :step-index="index"
+                          :slug="recipe.slug"
+                        />
                       </v-col>
                     </v-row>
                   </v-card-text>
@@ -390,6 +400,7 @@ import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import DropZone from "~/components/global/DropZone.vue";
 import RecipeIngredients from "~/components/Domain/Recipe/RecipeIngredients.vue";
 import RecipeIngredientHtml from "~/components/Domain/Recipe/RecipeIngredientHtml.vue";
+import RecipeStepTimerChips from "~/components/Domain/Recipe/RecipeStepTimerChips.vue";
 
 interface MergerHistory {
   target: number;
