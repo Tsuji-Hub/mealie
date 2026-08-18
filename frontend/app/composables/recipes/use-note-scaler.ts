@@ -68,7 +68,8 @@ const VULGAR: [number, string][] = [
 ];
 
 /** A scaled amount, kitchen-formatted: whole numbers plain, nice fractions as vulgar
- * characters (`¾`, `1½`), everything else a 2-decimal number. */
+ * characters (`¾`, `1½`), sixteenths as ascii (`1/16`, `1 3/16` — no unicode glyph exists
+ * for them), everything else a 2-decimal number. */
 export function formatScaledQuantity(value: number): string {
   if (!Number.isFinite(value) || value <= 0) {
     return "0";
@@ -83,6 +84,14 @@ export function formatScaledQuantity(value: number): string {
   for (const [fraction, glyph] of VULGAR) {
     if (Math.abs(remainder - fraction) < 0.01) {
       return whole > 0 ? `${whole}${glyph}` : glyph;
+    }
+  }
+
+  // Sixteenths — `1/4 tsp` at ¼ used to fall through to "0.06 tsp", which is not a kitchen
+  // number. Odd numerators only: even ones reduce and were caught by the vulgar table above.
+  for (let numerator = 1; numerator < 16; numerator += 2) {
+    if (Math.abs(remainder - numerator / 16) < 0.01) {
+      return whole > 0 ? `${whole} ${numerator}/16` : `${numerator}/16`;
     }
   }
 
@@ -110,6 +119,19 @@ export function scaleIngredientNote(note: string, scale: number): string {
     return note;
   }
 
+  const rest = note.slice(full.length);
+
+  // Below 1/16 there is no honest kitchen fraction left. When the unit is a teaspoon the
+  // cook's word for it is "pinch" — the quantity AND the tsp word collapse into it
+  // (`1/8 tsp cayenne` at ¼ -> `pinch cayenne`). Single values only: ranges keep numbers,
+  // and non-tsp units keep the 2-decimal fallback (a "pinch of cup" is not a thing).
+  if (second === undefined && firstValue * scale < 1 / 16 - 1e-9) {
+    const tspMatch = rest.match(/^(\s+)(tsp\.?|teaspoons?)(?=[\s,]|$)/i);
+    if (tspMatch) {
+      return `${lead}pinch${rest.slice(tspMatch[0].length)}`;
+    }
+  }
+
   let scaled = formatScaledQuantity(firstValue * scale);
   if (second !== undefined) {
     const secondValue = parseQuantityToken(second);
@@ -119,5 +141,5 @@ export function scaleIngredientNote(note: string, scale: number): string {
     scaled += `-${formatScaledQuantity(secondValue * scale)}`;
   }
 
-  return lead + scaled + note.slice(full.length);
+  return lead + scaled + rest;
 }

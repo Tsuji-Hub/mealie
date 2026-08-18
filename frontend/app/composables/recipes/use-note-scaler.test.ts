@@ -111,4 +111,32 @@ describe("formatScaledQuantity", () => {
     expect(formatScaledQuantity(0.35)).toBe("0.35");
     expect(formatScaledQuantity(0)).toBe("0");
   });
+
+  test("sixteenths render as ascii fractions, not decimals (PROMPT N polish)", () => {
+    expect(formatScaledQuantity(1 / 16)).toBe("1/16");
+    expect(formatScaledQuantity(3 / 16)).toBe("3/16");
+    expect(formatScaledQuantity(1 + 3 / 16)).toBe("1 3/16");
+    // even sixteenths keep reducing to the vulgar table
+    expect(formatScaledQuantity(2 / 16)).toBe("⅛");
+  });
+});
+
+describe("sixteenths and the pinch rule (PROMPT N)", () => {
+  test("'1/4 tsp vanilla' at ¼ shows 1/16 tsp, not 0.06 — the reported bug", () => {
+    expect(scaleIngredientNote("1/4 tsp vanilla", 0.25)).toBe("1/16 tsp vanilla");
+  });
+
+  test("'⅛ tsp cayenne' at ½ is a sixteenth; at ¼ it collapses to a pinch", () => {
+    expect(scaleIngredientNote("⅛ tsp cayenne", 0.5)).toBe("1/16 tsp cayenne");
+    expect(scaleIngredientNote("⅛ tsp cayenne", 0.25)).toBe("pinch cayenne");
+    expect(scaleIngredientNote("1/8 teaspoon cayenne", 0.25)).toBe("pinch cayenne");
+  });
+
+  test("pinch is tsp-only — other units keep the decimal fallback", () => {
+    expect(scaleIngredientNote("1/8 cup broth", 0.25)).toBe("0.03 cup broth");
+  });
+
+  test("ranges never collapse to pinch and can carry sixteenths", () => {
+    expect(scaleIngredientNote("1/4-1/2 tsp chili flakes", 0.25)).toBe("1/16-⅛ tsp chili flakes");
+  });
 });
