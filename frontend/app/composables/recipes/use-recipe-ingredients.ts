@@ -1,5 +1,6 @@
 import DOMPurify from "isomorphic-dompurify";
 import { useFraction } from "./use-fraction";
+import { scaleIngredientNote } from "./use-note-scaler";
 import { useLocales } from "../use-locales";
 import type { CreateIngredientFood, CreateIngredientUnit, IngredientFood, IngredientUnit, Recipe, RecipeIngredient } from "~/lib/api/types/recipe";
 
@@ -126,11 +127,20 @@ export function useIngredientTextParser() {
     const unitName = useUnitName(unit || undefined, usePluralUnit);
     const ingName = referencedRecipe ? referencedRecipe.name || "" : useFoodName(food || undefined, usePluralFood);
 
+    // Fork: an UNPARSED ingredient (no food, no unit, no numeric quantity — which is every
+    // row in this library) carries its whole line in `note`, and the structured scaling
+    // above never sees it. Scale the note's leading quantity token at display time instead.
+    // scaleIngredientNote returns the exact input at scale=1, so the default path is
+    // byte-identical to before this seam existed. Parsed ingredients keep their note
+    // untouched — their quantity already scaled, and their note is commentary.
+    const isUnparsedTextNote = !unit && !food && !(quantity && Number(quantity) !== 0);
+    const displayNote = isUnparsedTextNote && note ? scaleIngredientNote(note, scale) : note;
+
     return {
       quantity: returnQty ? sanitizeIngredientHTML(returnQty) : undefined,
       unit: unitName && quantity ? sanitizeIngredientHTML(unitName) : undefined,
       name: ingName ? sanitizeIngredientHTML(ingName) : undefined,
-      note: note ? sanitizeIngredientHTML(note) : undefined,
+      note: displayNote ? sanitizeIngredientHTML(displayNote) : undefined,
       recipeLink: useRecipeLink(referencedRecipe || undefined, groupSlug),
     };
   };

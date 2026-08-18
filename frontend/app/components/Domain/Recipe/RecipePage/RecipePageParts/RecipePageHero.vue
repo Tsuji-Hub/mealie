@@ -25,6 +25,7 @@
     <!-- Signature macro stat block; floats over the photo's lower edge when present -->
     <RecipePageMacroBar
       :recipe="recipe"
+      :scale="scale"
       :class="{ 'fork-hero__stats--float': hasPhoto }"
     />
 
@@ -76,7 +77,7 @@ import { useLoggedInState } from "~/composables/use-logged-in-state";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe } from "~/lib/api/types/recipe";
 
-const props = defineProps<{ recipe: NoUndefinedField<Recipe> }>();
+const props = withDefaults(defineProps<{ recipe: NoUndefinedField<Recipe>; scale?: number }>(), { scale: 1 });
 
 const { isOwnGroup } = useLoggedInState();
 

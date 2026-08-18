@@ -12,7 +12,7 @@
           Macros for {{ portionText }}
         </div>
         <div v-if="servings > 1" class="fork-macros__sub">
-          Makes {{ servings }} {{ servingsLabel }}
+          Makes {{ displayServings }} {{ servingsLabel }}
         </div>
         <!-- Explains the tilde. Without this the ~ is a mystery character; with it, the
              number is honestly labelled as a guess he can overwrite. -->
@@ -128,7 +128,7 @@
           </div>
         </div>
         <div class="fork-est__meta">
-          <div>Per {{ portionText }}<span v-if="servings > 1"> · makes {{ servings }} {{ servingsLabel }}</span></div>
+          <div>Per {{ portionText }}<span v-if="servings > 1"> · makes {{ displayServings }} {{ servingsLabel }}</span></div>
           <div v-if="estimate.basis" class="fork-est__basis">
             {{ estimate.basis }}
           </div>
@@ -155,6 +155,7 @@ import {
   NUTRITION_ESTIMATED_KEY,
   isNutritionEstimated,
 } from "~/composables/recipes/use-nutrition-estimate";
+import { formatScaledQuantity } from "~/composables/recipes/use-note-scaler";
 import { extraText, portionLabel } from "~/composables/recipes/use-serving-label";
 import { useGroupSelf } from "~/composables/use-groups";
 import { useLoggedInState } from "~/composables/use-logged-in-state";
@@ -162,7 +163,7 @@ import { alert } from "~/composables/use-toast";
 import type { NoUndefinedField, NutritionEstimate } from "~/lib/api/types/non-generated";
 import type { Recipe, RecipeCategory } from "~/lib/api/types/recipe";
 
-const props = defineProps<{ recipe: NoUndefinedField<Recipe> }>();
+const props = withDefaults(defineProps<{ recipe: NoUndefinedField<Recipe>; scale?: number }>(), { scale: 1 });
 
 const i18n = useI18n();
 const route = useRoute();
@@ -202,6 +203,13 @@ const macroCells = computed(() => getMacroCells(localNutrition.value, isEstimate
 
 const servings = computed<number>(
   () => props.recipe.recipeServings || props.recipe.recipeYieldQuantity || 1,
+);
+
+// "Makes N" follows the scale chips; the macro CELLS deliberately do not — they are
+// per-serving, and half a batch does not change what one cookie contains. Kitchen-fraction
+// formatting matches the scaled ingredient lines ("Makes 1½ cookies", never "1.5").
+const displayServings = computed(() =>
+  props.scale === 1 ? String(servings.value) : formatScaledQuantity(servings.value * props.scale),
 );
 
 /** The yield noun ("slices"), with any leading quantity stripped ("8 slices" -> "slices"). */

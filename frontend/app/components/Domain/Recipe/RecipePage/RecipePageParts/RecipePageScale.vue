@@ -1,5 +1,12 @@
 <template>
-  <div class="d-flex justify-space-between align-center pt-2 pb-3">
+  <div class="d-flex justify-space-between align-center flex-wrap ga-2 pt-2 pb-3">
+    <!-- Fork: fractional chips are the PRIMARY scale control — the upstream servings
+         stepper below is inert on a library with no linked foods/units (its edit
+         affordance is gated on hasFoodOrUnit), which is every recipe here. -->
+    <RecipeScaleChips
+      v-if="!isEditMode"
+      v-model.number="scale"
+    />
     <RecipeScaleEditButton
       v-if="!isEditMode && showServings"
       v-model.number="scale"
@@ -10,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import RecipeScaleChips from "~/components/Domain/Recipe/RecipeScaleChips.vue";
 import RecipeScaleEditButton from "~/components/Domain/Recipe/RecipeScaleEditButton.vue";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe } from "~/lib/api/types/recipe";

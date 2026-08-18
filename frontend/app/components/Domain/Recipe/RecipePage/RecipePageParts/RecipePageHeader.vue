@@ -1,6 +1,6 @@
 <template>
   <div>
-    <RecipePageHero :recipe="recipe" />
+    <RecipePageHero :recipe="recipe" :scale="recipeScale" />
     <v-divider />
     <RecipeActionMenu
       :recipe="recipe"
