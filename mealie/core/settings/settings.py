@@ -266,6 +266,12 @@ class AppSettings(AppLoggingSettings):
     standalone container). Unset disables the whole Send-to-AnyList feature: the routes 404
     and the frontend hides its UI. Credentials live ONLY in the bridge's own env — never here."""
 
+    ANYLIST_LIST: str | None = None
+    """Fork: pin Send-to-AnyList to this one list. The bridge account owns EVERY list its
+    user has (including private ones), so when set, /lists returns only this name without
+    asking the bridge — the account's other list names never reach any browser — and /send
+    rejects any other target. Unset keeps the generic full-account picker behavior."""
+
     # ===============================================
     # Email Configuration
 

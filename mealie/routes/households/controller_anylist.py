@@ -36,6 +36,11 @@ def _bridge_url() -> str | None:
     return get_app_settings().ANYLIST_BRIDGE_URL
 
 
+def _pinned_list() -> str | None:
+    """The one allowed target list, when the install pins one (see ANYLIST_LIST)."""
+    return get_app_settings().ANYLIST_LIST
+
+
 def _require_bridge() -> str:
     url = _bridge_url()
     if not url:
@@ -53,6 +58,14 @@ class AnyListController(BaseUserController):
     @router.get("/lists", response_model=AnyListLists)
     def get_lists(self):
         url = _require_bridge()
+
+        # Pinned install: the bridge account owns the user's ENTIRE AnyList (private lists
+        # included), and this is a shared-household app. Answer from config without asking
+        # the bridge, so the other list names never reach any browser.
+        pinned = _pinned_list()
+        if pinned:
+            return AnyListLists(lists=[pinned])
+
         try:
             response = requests.get(f"{url}/lists", timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
             response.raise_for_status()
@@ -72,6 +85,18 @@ class AnyListController(BaseUserController):
     @router.post("/send", response_model=AnyListSendResult)
     def send(self, data: AnyListSendRequest):
         url = _require_bridge()
+
+        # Pinned install: refuse any other target — a stale last-used list remembered by
+        # some device's localStorage must not leak items onto it. Attributable error, third
+        # member of the taxonomy: not-configured (404) / unreachable (502) / not allowed (400).
+        pinned = _pinned_list()
+        if pinned and data.list_name != pinned:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=ErrorResponse.respond(
+                    message=f'AnyList list not allowed; this install sends only to "{pinned}".'
+                ),
+            )
 
         def add_item(item: str) -> AnyListItemResult:
             try:

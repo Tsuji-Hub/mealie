@@ -6,8 +6,18 @@
     content-class="fork-anylist-sheet"
   >
     <v-card class="fork-anylist">
-      <v-card-title class="fork-anylist__title">
-        Send to AnyList
+      <v-card-title class="fork-anylist__title d-flex align-center">
+        <!-- ONE master control (opt-in flow, PROMPT P): everything starts unchecked, this
+             selects/deselects all, indeterminate while partially selected. -->
+        <v-checkbox-btn
+          :model-value="allChecked"
+          :indeterminate="someChecked && !allChecked"
+          density="compact"
+          class="mr-1 flex-0-0"
+          aria-label="Select all ingredients"
+          @click.stop="toggleAll"
+        />
+        <span>Send to AnyList</span>
       </v-card-title>
 
       <v-card-text class="pt-0">
@@ -29,7 +39,14 @@
           </label>
         </div>
 
+        <!-- A pinned install (ANYLIST_LIST) returns exactly one list — the backend never
+             exposes the account's other names, so a picker would be a control with one
+             choice. Static label instead; the picker only exists on generic installs. -->
+        <div v-if="singleListMode" class="fork-anylist__pinned">
+          → {{ selectedList }}
+        </div>
         <v-select
+          v-else
           v-model="selectedList"
           :items="listOptions"
           label="AnyList list"
@@ -55,7 +72,7 @@
           :disabled="!selectedList || checkedLines.length === 0"
           @click="send"
         >
-          {{ failedItems.size ? "Retry failed" : `Send ${checkedLines.length}` }}
+          {{ failedItems.size ? "Retry failed" : `Send ${checkedLines.length} item${checkedLines.length === 1 ? "" : "s"}` }}
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -106,22 +123,39 @@ watch(open, async (isOpen) => {
 }, { immediate: true });
 
 async function prepareSheet() {
-  // Everything pre-checked on open (uncheck what you already have); failures reset.
-  checked.value = lines.value.map(() => true);
+  // Opt-in (PROMPT P): everything starts UNCHECKED — pick what you actually need. The
+  // original pre-check-everything default sent whole recipes nobody asked for.
+  checked.value = lines.value.map(() => false);
   failedItems.value = new Set();
   listOptions.value = lists.value;
-  const remembered = typeof window !== "undefined" ? window.localStorage.getItem(LAST_LIST_KEY) : null;
-  selectedList.value = remembered && lists.value.includes(remembered) ? remembered : (lists.value[0] ?? "");
+  selectedList.value = pickList(lists.value);
   // Sheet lazy-loads fresh data on open (perf guardrail: nothing fetched before then).
   const fresh = await refreshLists();
   listOptions.value = fresh;
-  if (!selectedList.value && fresh.length) {
-    const rememberedName = typeof window !== "undefined" ? window.localStorage.getItem(LAST_LIST_KEY) : null;
-    selectedList.value = rememberedName && fresh.includes(rememberedName) ? rememberedName : fresh[0]!;
+  if (!selectedList.value || !fresh.includes(selectedList.value)) {
+    selectedList.value = pickList(fresh);
   }
 }
 
+/** A single-entry /lists response = a pinned install: no picker, no last-used memory. */
+const singleListMode = computed(() => listOptions.value.length === 1);
+
+function pickList(names: string[]): string {
+  if (names.length === 1) {
+    return names[0]!;
+  }
+  const remembered = typeof window !== "undefined" ? window.localStorage.getItem(LAST_LIST_KEY) : null;
+  return remembered && names.includes(remembered) ? remembered : (names[0] ?? "");
+}
+
 const checkedLines = computed(() => lines.value.filter((_, index) => checked.value[index]));
+const allChecked = computed(() => checked.value.length > 0 && checked.value.every(Boolean));
+const someChecked = computed(() => checked.value.some(Boolean));
+
+function toggleAll() {
+  const next = !allChecked.value;
+  checked.value = lines.value.map(() => next);
+}
 
 async function send() {
   if (!selectedList.value || checkedLines.value.length === 0) {
@@ -140,10 +174,12 @@ async function send() {
     return;
   }
 
-  try {
-    window.localStorage.setItem(LAST_LIST_KEY, selectedList.value);
+  if (!singleListMode.value) {
+    try {
+      window.localStorage.setItem(LAST_LIST_KEY, selectedList.value);
+    }
+    catch { /* storage full/blocked — remembering the list is a nicety */ }
   }
-  catch { /* storage full/blocked — remembering the list is a nicety */ }
 
   const failures = new Set(data.results.filter(result => !result.ok).map(result => result.item));
   failedItems.value = failures;
@@ -189,6 +225,13 @@ async function send() {
   margin-top: 10px;
   font-size: 12.5px;
   color: rgb(var(--v-theme-error));
+}
+
+.fork-anylist__pinned {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.75;
 }
 </style>
 

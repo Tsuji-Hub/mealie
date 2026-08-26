@@ -121,3 +121,63 @@ def test_anylist_send_rejects_empty_items(api_client: TestClient, unique_user: T
     enable_bridge(monkeypatch)
     response = api_client.post(SEND_ROUTE, json={"items": [], "list": "Groceries"}, headers=unique_user.token)
     assert response.status_code == 422
+
+
+def pin_list(monkeypatch: MonkeyPatch, name: str = "Shared Grocery List"):
+    monkeypatch.setattr(controller_anylist, "_pinned_list", lambda: name)
+
+
+def test_anylist_pinned_lists_answer_without_touching_the_bridge(
+    api_client: TestClient, unique_user: TestUser, monkeypatch: MonkeyPatch
+):
+    enable_bridge(monkeypatch)
+    pin_list(monkeypatch)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("pinned /lists must never call the bridge")
+
+    monkeypatch.setattr(controller_anylist.requests, "get", forbidden)
+
+    response = api_client.get(LISTS_ROUTE, headers=unique_user.token)
+    data = assert_deserialize(response, 200)
+    # Exactly the pinned name — the account's other list names never reach a browser.
+    assert data["lists"] == ["Shared Grocery List"]
+
+
+def test_anylist_pinned_send_rejects_other_lists_before_the_bridge(
+    api_client: TestClient, unique_user: TestUser, monkeypatch: MonkeyPatch
+):
+    enable_bridge(monkeypatch)
+    pin_list(monkeypatch)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("a rejected send must never reach the bridge")
+
+    monkeypatch.setattr(controller_anylist.requests, "post", forbidden)
+
+    # The stale-localStorage case: some device still remembers a pre-pin list name.
+    response = api_client.post(
+        SEND_ROUTE, json={"items": ["2 eggs"], "list": "Backyard BBQ"}, headers=unique_user.token
+    )
+    assert response.status_code == 400
+    assert "not allowed" in response.json()["detail"]["message"].lower()
+
+
+def test_anylist_pinned_send_accepts_the_pinned_name(
+    api_client: TestClient, unique_user: TestUser, monkeypatch: MonkeyPatch
+):
+    enable_bridge(monkeypatch)
+    pin_list(monkeypatch)
+    seen: list[dict] = []
+
+    def fake_post(url, json=None, **kwargs):
+        seen.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(controller_anylist.requests, "post", fake_post)
+
+    body = {"items": ["20 g flour", "2 eggs"], "list": "Shared Grocery List"}
+    response = api_client.post(SEND_ROUTE, json=body, headers=unique_user.token)
+    data = assert_deserialize(response, 200)
+    assert data["sent"] == 2
+    assert all(payload["list"] == "Shared Grocery List" for payload in seen)

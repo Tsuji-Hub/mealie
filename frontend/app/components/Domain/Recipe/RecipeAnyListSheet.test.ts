@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createVuetify } from "vuetify";
 import * as components from "vuetify/components";
@@ -18,16 +18,19 @@ import type { Recipe } from "~/lib/api/types/recipe";
 
 const sendMock = vi.fn();
 
+// Mutable so the pinned-install test can swap in a single-entry /lists response.
+const listsHolder = vi.hoisted(() => ({ names: ["Groceries", "Costco"] }));
+
 vi.mock("~/composables/api", () => ({
-  useUserApi: () => ({ anylist: { send: sendMock, getLists: vi.fn(async () => ({ data: { lists: ["Groceries"] } })) } }),
+  useUserApi: () => ({ anylist: { send: sendMock, getLists: vi.fn(async () => ({ data: { lists: listsHolder.names } })) } }),
 }));
 
 vi.mock("~/composables/recipes/use-anylist", () => ({
   useAnyList: () => ({
     available: ref(true),
-    lists: ref(["Groceries", "Costco"]),
+    lists: { get value() { return listsHolder.names; } },
     probeAtIdle: vi.fn(),
-    refreshLists: vi.fn(async () => ["Groceries", "Costco"]),
+    refreshLists: vi.fn(async () => listsHolder.names),
   }),
 }));
 
@@ -55,23 +58,46 @@ const recipe = {
   ],
 } as unknown as NoUndefinedField<Recipe>;
 
+// v-dialog teleports into document.body and STAYS there after a test — without cleanup,
+// later tests' queries silently hit the previous test's stale sheet.
+let activeWrapper: ReturnType<typeof mount> | null = null;
+
 function build(scale: number) {
-  return mount(RecipeAnyListSheet, {
+  activeWrapper = mount(RecipeAnyListSheet, {
     props: { recipe, scale, modelValue: true },
     global: { plugins: [vuetify] },
   });
+  return activeWrapper as ReturnType<typeof mount<typeof RecipeAnyListSheet>>;
 }
 
 beforeEach(() => {
   sendMock.mockReset();
+  listsHolder.names = ["Groceries", "Costco"];
   window.localStorage.clear();
 });
 
+afterEach(() => {
+  activeWrapper?.unmount();
+  activeWrapper = null;
+  document.body.innerHTML = "";
+});
+
+interface SheetVm {
+  send: () => Promise<void>;
+  toggleAll: () => void;
+  checkedLines: string[];
+  singleListMode: boolean;
+}
+
+async function settle(wrapper: ReturnType<typeof build>) {
+  await wrapper.vm.$nextTick();
+  await new Promise(r => setTimeout(r, 0)); // let the open-watcher's async refresh settle
+}
+
 describe("RecipeAnyListSheet", () => {
-  test("lines are the scaled display strings at the active scale, all pre-checked", async () => {
+  test("lines are the scaled display strings at the active scale, ALL UNCHECKED (opt-in)", async () => {
     const wrapper = build(0.5);
-    await wrapper.vm.$nextTick();
-    await new Promise(r => setTimeout(r, 0)); // let the open-watcher's async refresh settle
+    await settle(wrapper);
 
     // v-dialog teleports to body
     const text = document.body.textContent || "";
@@ -82,8 +108,42 @@ describe("RecipeAnyListSheet", () => {
     const boxes = document.body.querySelectorAll(".fork-anylist__item input[type='checkbox']");
     expect(boxes.length).toBe(3);
     for (const box of boxes) {
-      expect((box as HTMLInputElement).checked).toBe(true);
+      expect((box as HTMLInputElement).checked).toBe(false);
     }
+  });
+
+  test("send is disabled at 0 selected, and the button carries a live count", async () => {
+    const wrapper = build(0.5);
+    await settle(wrapper);
+
+    const sendBtn = [...document.body.querySelectorAll(".fork-anylist button")]
+      .find(b => /Send \d+ item/.test(b.textContent || "")) as HTMLButtonElement;
+    expect(sendBtn).toBeTruthy();
+    expect(sendBtn.textContent).toContain("Send 0 items");
+    expect(sendBtn.disabled).toBe(true);
+
+    const vm = wrapper.vm as unknown as SheetVm;
+    vm.toggleAll();
+    await wrapper.vm.$nextTick();
+    expect(sendBtn.textContent).toContain("Send 3 items");
+    expect(sendBtn.disabled).toBe(false);
+  });
+
+  test("the master toggle drives all -> none, and send() at 0 is a no-op", async () => {
+    sendMock.mockResolvedValue({ data: { results: [], sent: 0, failed: 0 }, error: null });
+    const wrapper = build(0.5);
+    await settle(wrapper);
+    const vm = wrapper.vm as unknown as SheetVm;
+
+    vm.toggleAll();
+    await wrapper.vm.$nextTick();
+    expect(vm.checkedLines).toHaveLength(3);
+    vm.toggleAll();
+    await wrapper.vm.$nextTick();
+    expect(vm.checkedLines).toHaveLength(0);
+
+    await vm.send();
+    expect(sendMock).not.toHaveBeenCalled();
   });
 
   test("send posts exactly the checked scaled lines to the chosen list", async () => {
@@ -92,10 +152,11 @@ describe("RecipeAnyListSheet", () => {
       error: null,
     });
     const wrapper = build(0.5);
-    await wrapper.vm.$nextTick();
-    await new Promise(r => setTimeout(r, 0));
+    await settle(wrapper);
 
-    const vm = wrapper.vm as unknown as { send: () => Promise<void> };
+    const vm = wrapper.vm as unknown as SheetVm;
+    vm.toggleAll(); // opt-in: select everything explicitly
+    await wrapper.vm.$nextTick();
     await vm.send();
 
     expect(sendMock).toHaveBeenCalledTimes(1);
@@ -119,15 +180,37 @@ describe("RecipeAnyListSheet", () => {
       error: null,
     });
     const wrapper = build(0.5);
-    await wrapper.vm.$nextTick();
-    await new Promise(r => setTimeout(r, 0));
+    await settle(wrapper);
 
-    const vm = wrapper.vm as unknown as { send: () => Promise<void> };
+    const vm = wrapper.vm as unknown as SheetVm;
+    vm.toggleAll();
+    await wrapper.vm.$nextTick();
     await vm.send();
 
     sendMock.mockResolvedValueOnce({ data: { results: [], sent: 1, failed: 0 }, error: null });
     await vm.send(); // retry
     const [retryItems] = sendMock.mock.calls[1]!;
     expect(retryItems).toEqual(["¾ lb Chicken Breast"]);
+  });
+
+  test("pinned install (single-entry /lists): static label, no picker, no last-used memory", async () => {
+    listsHolder.names = ["Shared Grocery List"];
+    sendMock.mockResolvedValue({ data: { results: [], sent: 1, failed: 0 }, error: null });
+
+    const wrapper = build(0.5);
+    await settle(wrapper);
+
+    const vm = wrapper.vm as unknown as SheetVm;
+    expect(vm.singleListMode).toBe(true);
+    expect((document.body.querySelector(".fork-anylist__pinned") || {}).textContent).toContain("→ Shared Grocery List");
+    expect(document.body.querySelector(".fork-anylist .v-select")).toBeNull();
+
+    vm.toggleAll();
+    await wrapper.vm.$nextTick();
+    await vm.send();
+    const [, list] = sendMock.mock.calls[0]!;
+    expect(list).toBe("Shared Grocery List");
+    // No last-used memory in pinned mode — there is nothing to remember.
+    expect(window.localStorage.getItem("fork.anylist.lastList")).toBeNull();
   });
 });
