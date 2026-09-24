@@ -259,7 +259,10 @@ def test_anylist_default_base_url_counts_as_unset():
 
 
 class FakeBridge:
-    """Stateful fake: /add 304s names already on the list, /items and /update act on them."""
+    """Stateful fake: /add 304s names already on the list, /items and /update act on them.
+
+    Items use the LIVE bridge 1.7.3 shape (keys: checked, id, name, notes). The first version
+    of this fake used `details`, which is why the overwrite bug shipped green (PROMPT Q.1)."""
 
     def __init__(self, items: list[dict]):
         self.items = {i["name"]: dict(i) for i in items}
@@ -273,14 +276,14 @@ class FakeBridge:
             self.items[json["name"]] = {
                 "id": f"id-{len(self.items)}",
                 "name": json["name"],
-                "details": json.get("notes", ""),
+                "notes": json.get("notes", ""),
                 "checked": False,
             }
             return FakeResponse()
         if url.endswith("/update"):
             self.updates.append(json)
             item = next(i for i in self.items.values() if i["id"] == json["id"])
-            item["details"] = json["notes"]
+            item["notes"] = json["notes"]
             item["checked"] = json["checked"]
             return FakeResponse()
         return FakeResponse(status_code=404)
@@ -304,9 +307,9 @@ def test_anylist_304_merges_notes_with_one_items_fetch(
     other_note = "Chicken Tikka\nhttps://recipes.example.test/g/home/r/chicken-tikka"
     bridge = FakeBridge(
         [
-            {"id": "a", "name": "2 eggs", "details": other_note, "checked": True},
-            {"id": "b", "name": "20 g flour", "details": "", "checked": False},
-            {"id": "c", "name": "1 lemon", "details": other_note, "checked": False},
+            {"id": "a", "name": "2 eggs", "notes": other_note, "checked": True},
+            {"id": "b", "name": "20 g flour", "notes": "", "checked": False},
+            {"id": "c", "name": "1 lemon", "notes": other_note, "checked": False},
         ]
     )
     install(monkeypatch, bridge)
@@ -323,8 +326,8 @@ def test_anylist_304_merges_notes_with_one_items_fetch(
     # Three 304s, ONE items fetch.
     assert bridge.get_items_calls == 1
     note = expected_note(recipe)
-    assert bridge.items["2 eggs"]["details"] == f"{other_note}\n{note}"
-    assert bridge.items["20 g flour"]["details"] == note  # empty details: no leading newline
+    assert bridge.items["2 eggs"]["notes"] == f"{other_note}\n{note}"
+    assert bridge.items["20 g flour"]["notes"] == note  # empty notes: no leading newline
     # Every sent item ends up unchecked.
     assert all(update["checked"] is False for update in bridge.updates)
     assert bridge.items["2 eggs"]["checked"] is False
@@ -343,7 +346,7 @@ def test_anylist_resend_is_idempotent(
         assert response.status_code == 200
 
     # Second send: 304 -> already tagged and unchecked -> nothing to update, URL not duplicated.
-    assert bridge.items["2 eggs"]["details"].count(expected_note(recipe).split("\n")[1]) == 1
+    assert bridge.items["2 eggs"]["notes"].count(expected_note(recipe).split("\n")[1]) == 1
     assert bridge.updates == []
     assert response.json()["results"][0]["status"] == "merged"
 
@@ -354,14 +357,14 @@ def test_anylist_resend_after_check_off_unchecks_without_duplicating(
     enable_bridge(monkeypatch)
     set_base(monkeypatch)
     note = expected_note(recipe)
-    bridge = FakeBridge([{"id": "a", "name": "2 eggs", "details": note, "checked": True}])
+    bridge = FakeBridge([{"id": "a", "name": "2 eggs", "notes": note, "checked": True}])
     install(monkeypatch, bridge)
 
     response = api_client.post(SEND_ROUTE, json=body(recipe, ["2 eggs"]), headers=unique_user.token)
     assert assert_deserialize(response, 200)["results"][0]["status"] == "merged"
 
     assert bridge.updates == [{"id": "a", "list": "Groceries", "notes": note, "checked": False}]
-    assert bridge.items["2 eggs"]["details"] == note
+    assert bridge.items["2 eggs"]["notes"] == note
 
 
 def test_anylist_304_but_item_missing_fails_attributably(
@@ -375,3 +378,58 @@ def test_anylist_304_but_item_missing_fails_attributably(
     result = assert_deserialize(response, 200)["results"][0]
     assert result["status"] == "failed"
     assert "rejected" in result["error"].lower()
+
+
+def test_anylist_second_recipe_appends_not_replaces(
+    api_client: TestClient, unique_user: TestUser, recipe: dict, monkeypatch: MonkeyPatch
+):
+    # The live acceptance failure: send recipe A, then recipe B with a shared line. The shared
+    # item must carry BOTH notes, in order, not just B's.
+    enable_bridge(monkeypatch)
+    set_base(monkeypatch)
+    bridge = FakeBridge([])
+    install(monkeypatch, bridge)
+
+    name_b = f"Garlic Naan Pizzas {random_string(6)}"
+    slug_b = api_client.post("/api/recipes", json={"name": name_b}, headers=unique_user.token).json()
+    recipe_b = {"name": name_b, "slug": slug_b, "group_slug": recipe["group_slug"]}
+
+    api_client.post(SEND_ROUTE, json=body(recipe, ["2 cloves garlic"]), headers=unique_user.token)
+    response = api_client.post(SEND_ROUTE, json=body(recipe_b, ["2 cloves garlic"]), headers=unique_user.token)
+
+    assert response.json()["results"][0]["status"] == "merged"
+    assert len(bridge.items) == 1
+    assert bridge.items["2 cloves garlic"]["notes"] == f"{expected_note(recipe)}\n{expected_note(recipe_b)}"
+
+
+def test_anylist_merge_falls_back_to_details_key(
+    api_client: TestClient, unique_user: TestUser, recipe: dict, monkeypatch: MonkeyPatch
+):
+    # A bridge that reports the note as `details` (AnyList's own field name) must still merge.
+    enable_bridge(monkeypatch)
+    set_base(monkeypatch)
+    other_note = "Chicken Tikka\nhttps://recipes.example.test/g/home/r/chicken-tikka"
+    updates: list[dict] = []
+
+    def fake_post(url, json=None, **kwargs):
+        if url.endswith("/add"):
+            return FakeResponse(status_code=304)
+        updates.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(controller_anylist.requests, "post", fake_post)
+    monkeypatch.setattr(
+        controller_anylist.requests,
+        "get",
+        lambda *a, **k: FakeResponse(payload=[{"id": "a", "name": "2 eggs", "details": other_note, "checked": False}]),
+    )
+
+    response = api_client.post(SEND_ROUTE, json=body(recipe, ["2 eggs"]), headers=unique_user.token)
+    assert response.json()["results"][0]["status"] == "merged"
+    assert updates[0]["notes"] == f"{other_note}\n{expected_note(recipe)}"
+
+
+def test_existing_notes_prefers_notes_then_details():
+    assert controller_anylist.existing_notes({"notes": "a", "details": "b"}) == "a"
+    assert controller_anylist.existing_notes({"details": "b"}) == "b"
+    assert controller_anylist.existing_notes({"notes": None}) == ""

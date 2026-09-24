@@ -67,9 +67,17 @@ def _public_base_url() -> str | None:
 
 
 def recipe_note(name: str, recipe_url: str | None) -> str:
-    """The item note (AnyList `details`, the gray line under the item): exactly the recipe
+    """The item note (the gray line under the item in the AnyList app): exactly the recipe
     name, then its public URL. No prefix words, no trailing punctuation."""
     return f"{name}{NOTE_SEPARATOR}{recipe_url}" if recipe_url else name
+
+
+def existing_notes(item: dict[str, Any]) -> str:
+    """The note already on a listed item. Bridge 1.7.3's GET /items returns it as `notes`
+    (live keys: checked, id, name, notes). `details` is AnyList's own name for the field and
+    is kept as a fallback, so a bridge that renames it cannot silently turn every merge back
+    into an overwrite (the bug this replaced: reading only `details` always saw "")."""
+    return item.get("notes") or item.get("details") or ""
 
 
 def _require_bridge() -> str:
@@ -173,16 +181,16 @@ class AnyListController(BaseUserController):
                     item=item, status=AnyListItemStatus.failed, error="AnyList rejected (304, item not found)"
                 )
 
-            details = existing.get("details") or ""
-            already_tagged = marker in details
+            current = existing_notes(existing)
+            already_tagged = marker in current
             # Every sent item ends up unchecked: a re-send means Mom needs to buy it again.
             if already_tagged and not existing.get("checked"):
                 return AnyListItemResult(item=item, status=AnyListItemStatus.merged)
 
-            new_details = details if already_tagged else (f"{details}{NOTE_SEPARATOR}{note}" if details else note)
+            new_notes = current if already_tagged else (f"{current}{NOTE_SEPARATOR}{note}" if current else note)
             response = requests.post(
                 f"{url}/update",
-                json={"id": existing["id"], "list": data.list_name, "notes": new_details, "checked": False},
+                json={"id": existing["id"], "list": data.list_name, "notes": new_notes, "checked": False},
                 timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
             )
             if response.status_code >= 400:
