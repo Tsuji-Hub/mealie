@@ -12,15 +12,27 @@ account is the problem). A future breakage should be a five-minute diagnosis.
 """
 
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
+from typing import Any
 
 import requests
 from fastapi import APIRouter, HTTPException, status
 
 from mealie.core.config import get_app_settings
+from mealie.core.exceptions import NoEntryFound
 from mealie.routes._base.base_controllers import BaseUserController
 from mealie.routes._base.controller import controller
-from mealie.schema.household.anylist import AnyListItemResult, AnyListLists, AnyListSendRequest, AnyListSendResult
+from mealie.schema.household.anylist import (
+    AnyListItemResult,
+    AnyListItemStatus,
+    AnyListLists,
+    AnyListRecipeTag,
+    AnyListSendRequest,
+    AnyListSendResult,
+)
 from mealie.schema.response import ErrorResponse
+from mealie.services import urls
+from mealie.services.recipe.recipe_service import RecipeService
 
 router = APIRouter(prefix="/households/anylist", tags=["Households: AnyList"])
 
@@ -39,6 +51,25 @@ def _bridge_url() -> str | None:
 def _pinned_list() -> str | None:
     """The one allowed target list, when the install pins one (see ANYLIST_LIST)."""
     return get_app_settings().ANYLIST_LIST
+
+
+# The single place the two note lines are joined. If the AnyList app collapses the newline,
+# this becomes " · " and nothing else changes.
+NOTE_SEPARATOR = "\n"
+
+
+def _public_base_url() -> str | None:
+    """BASE_URL, or None when it is still the default. The default is http://localhost:8080,
+    which on Mom's phone is a dead link, so it counts as unset: the note is then the recipe
+    name alone. Never a relative path, never request.host, never a LAN address."""
+    settings = get_app_settings()
+    return None if settings.is_default_base_url else settings.BASE_URL
+
+
+def recipe_note(name: str, recipe_url: str | None) -> str:
+    """The item note (AnyList `details`, the gray line under the item): exactly the recipe
+    name, then its public URL. No prefix words, no trailing punctuation."""
+    return f"{name}{NOTE_SEPARATOR}{recipe_url}" if recipe_url else name
 
 
 def _require_bridge() -> str:
@@ -98,18 +129,84 @@ class AnyListController(BaseUserController):
                 ),
             )
 
+        # Resolve the recipe inside the caller's group, same scope as the recipe routes. The
+        # note's name and URL are built from THIS record, never from client-supplied text.
+        try:
+            recipe = RecipeService(self.repos, self.user, self.household, translator=self.translator).get_one(
+                data.recipe.slug
+            )
+        except NoEntryFound as e:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                detail=ErrorResponse.respond(message="AnyList send: recipe not found."),
+            ) from e
+
+        base = _public_base_url()
+        recipe_url = urls.recipe_url(self.group.slug, recipe.slug, base) if base else None
+        note = recipe_note(recipe.name or recipe.slug, recipe_url)
+        # What proves "this recipe is already tagged on the item": the URL when there is one.
+        marker = recipe_url or note
+
+        # A 304 from /add means an item with that exact name is already on the list. Fetch
+        # the list's items at most ONCE per send, however many items come back 304.
+        items_lock = Lock()
+        items_cache: dict[str, list[dict[str, Any]]] = {}
+
+        def list_items() -> list[dict[str, Any]]:
+            with items_lock:
+                if "items" not in items_cache:
+                    response = requests.get(
+                        f"{url}/items",
+                        params={"list": data.list_name},
+                        timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+                    )
+                    response.raise_for_status()
+                    payload = response.json()
+                    raw = payload.get("items", []) if isinstance(payload, dict) else payload
+                    items_cache["items"] = [i for i in raw if isinstance(i, dict)]
+                return items_cache["items"]
+
+        def merge_existing(item: str) -> AnyListItemResult:
+            existing = next((i for i in list_items() if i.get("name") == item), None)
+            if existing is None or not existing.get("id"):
+                return AnyListItemResult(
+                    item=item, status=AnyListItemStatus.failed, error="AnyList rejected (304, item not found)"
+                )
+
+            details = existing.get("details") or ""
+            already_tagged = marker in details
+            # Every sent item ends up unchecked: a re-send means Mom needs to buy it again.
+            if already_tagged and not existing.get("checked"):
+                return AnyListItemResult(item=item, status=AnyListItemStatus.merged)
+
+            new_details = details if already_tagged else (f"{details}{NOTE_SEPARATOR}{note}" if details else note)
+            response = requests.post(
+                f"{url}/update",
+                json={"id": existing["id"], "list": data.list_name, "notes": new_details, "checked": False},
+                timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
+            )
+            if response.status_code >= 400:
+                return AnyListItemResult(
+                    item=item, status=AnyListItemStatus.failed, error=f"AnyList rejected ({response.status_code})"
+                )
+            return AnyListItemResult(item=item, status=AnyListItemStatus.merged)
+
         def add_item(item: str) -> AnyListItemResult:
             try:
                 response = requests.post(
                     f"{url}/add",
-                    json={"name": item, "list": data.list_name},
+                    json={"name": item, "list": data.list_name, "notes": note},
                     timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
                 )
+                if response.status_code == 304:
+                    return merge_existing(item)
             except requests.RequestException:
-                return AnyListItemResult(item=item, ok=False, error="bridge unreachable")
-            if response.status_code >= 400:
-                return AnyListItemResult(item=item, ok=False, error=f"AnyList rejected ({response.status_code})")
-            return AnyListItemResult(item=item, ok=True)
+                return AnyListItemResult(item=item, status=AnyListItemStatus.failed, error="bridge unreachable")
+            if response.status_code >= 300:
+                return AnyListItemResult(
+                    item=item, status=AnyListItemStatus.failed, error=f"AnyList rejected ({response.status_code})"
+                )
+            return AnyListItemResult(item=item, status=AnyListItemStatus.added)
 
         # Server-side loop with small concurrency: the browser sends ONE request per send,
         # the fan-out happens here on the LAN. Order of results mirrors the request.
@@ -117,11 +214,18 @@ class AnyListController(BaseUserController):
             results = list(pool.map(add_item, data.items))
 
         # Nothing reached the bridge at all -> that's a bridge outage, not a partial failure.
-        if results and all(not r.ok and r.error == "bridge unreachable" for r in results):
+        if results and all(r.error == "bridge unreachable" for r in results):
             raise HTTPException(
                 status.HTTP_502_BAD_GATEWAY,
                 detail=ErrorResponse.respond(message="AnyList bridge unreachable."),
             )
 
-        sent = sum(1 for r in results if r.ok)
-        return AnyListSendResult(results=results, sent=sent, failed=len(results) - sent)
+        added = sum(1 for r in results if r.status == AnyListItemStatus.added)
+        merged = sum(1 for r in results if r.status == AnyListItemStatus.merged)
+        return AnyListSendResult(
+            recipe=AnyListRecipeTag(name=recipe.name or recipe.slug, url=recipe_url),
+            results=results,
+            sent=added + merged,
+            merged=merged,
+            failed=len(results) - added - merged,
+        )

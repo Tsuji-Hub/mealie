@@ -13,13 +13,17 @@ export interface AnyListLists {
 
 export interface AnyListItemResult {
   item: string;
-  ok: boolean;
+  /** merged = the item was already on the list; this recipe's note was appended to it. */
+  status: "added" | "merged" | "failed";
   error?: string | null;
 }
 
 export interface AnyListSendResult {
+  /** The tag the backend wrote under every item (url is null when BASE_URL is unset). */
+  recipe: { name: string; url?: string | null };
   results: AnyListItemResult[];
   sent: number;
+  merged: number;
   failed: number;
 }
 
@@ -30,7 +34,8 @@ export class AnyListAPI extends BaseAPI {
     return await this.requests.get<AnyListLists>(routes.lists);
   }
 
-  async send(items: string[], list: string) {
-    return await this.requests.post<AnyListSendResult>(routes.send, { items, list });
+  /** Only the slug is sent: the backend resolves the recipe and builds the note itself. */
+  async send(items: string[], list: string, recipeSlug: string) {
+    return await this.requests.post<AnyListSendResult>(routes.send, { items, list, recipe: { slug: recipeSlug } });
   }
 }

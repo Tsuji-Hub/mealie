@@ -42,8 +42,10 @@
         <!-- A pinned install (ANYLIST_LIST) returns exactly one list — the backend never
              exposes the account's other names, so a picker would be a control with one
              choice. Static label instead; the picker only exists on generic installs. -->
+        <!-- The recipe name rides along so it is obvious what every item will be tagged
+             with (the backend writes it, plus the recipe link, under each item). -->
         <div v-if="singleListMode" class="fork-anylist__pinned">
-          → {{ selectedList }}
+          → {{ selectedList }} · {{ recipe.name }}
         </div>
         <v-select
           v-else
@@ -52,7 +54,8 @@
           label="AnyList list"
           density="compact"
           variant="outlined"
-          hide-details
+          :hint="`Tagged with ${recipe.name}`"
+          persistent-hint
           class="mt-4"
         />
 
@@ -166,7 +169,7 @@ async function send() {
     ? checkedLines.value.filter(line => failedItems.value.has(line))
     : checkedLines.value;
 
-  const { data, error } = await api.anylist.send(toSend, selectedList.value);
+  const { data, error } = await api.anylist.send(toSend, selectedList.value, props.recipe.slug);
   sending.value = false;
 
   if (error || !data) {
@@ -181,11 +184,13 @@ async function send() {
     catch { /* storage full/blocked — remembering the list is a nicety */ }
   }
 
-  const failures = new Set(data.results.filter(result => !result.ok).map(result => result.item));
+  const failures = new Set(data.results.filter(result => result.status === "failed").map(result => result.item));
   failedItems.value = failures;
 
   if (failures.size === 0) {
-    alert.success(`${data.sent} item${data.sent === 1 ? "" : "s"} → ${selectedList.value}`);
+    // "merged" = already on the list; this recipe's note was appended and it was unchecked.
+    const merged = data.merged ? ` (${data.merged} merged)` : "";
+    alert.success(`${data.sent} item${data.sent === 1 ? "" : "s"} → ${selectedList.value}${merged}`);
     open.value = false;
   }
   else {

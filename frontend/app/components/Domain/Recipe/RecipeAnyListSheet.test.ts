@@ -6,6 +6,7 @@ import * as components from "vuetify/components";
 import * as directives from "vuetify/directives";
 import { ref } from "vue";
 import RecipeAnyListSheet from "./RecipeAnyListSheet.vue";
+import { alert } from "~/composables/use-toast";
 import { scaleIngredientNote } from "~/composables/recipes/use-note-scaler";
 import type { NoUndefinedField } from "~/lib/api/types/non-generated";
 import type { Recipe } from "~/lib/api/types/recipe";
@@ -51,6 +52,7 @@ const vuetify = createVuetify({ components, directives });
 
 const recipe = {
   slug: "sauce",
+  name: "Garlic Sauce",
   recipeIngredient: [
     { note: "40 g All Purpose Flour" },
     { note: "1.5 lb Chicken Breast" },
@@ -160,9 +162,11 @@ describe("RecipeAnyListSheet", () => {
     await vm.send();
 
     expect(sendMock).toHaveBeenCalledTimes(1);
-    const [items, list] = sendMock.mock.calls[0]!;
+    const [items, list, slug] = sendMock.mock.calls[0]!;
     expect(items).toEqual(["20 g All Purpose Flour", "¾ lb Chicken Breast", "Salt to taste"]);
     expect(list).toBe("Groceries");
+    // Only the slug goes up; the backend resolves the recipe and writes the note itself.
+    expect(slug).toBe("sauce");
     expect(window.localStorage.getItem("fork.anylist.lastList")).toBe("Groceries");
   });
 
@@ -170,11 +174,12 @@ describe("RecipeAnyListSheet", () => {
     sendMock.mockResolvedValueOnce({
       data: {
         results: [
-          { item: "20 g All Purpose Flour", ok: true },
-          { item: "¾ lb Chicken Breast", ok: false, error: "AnyList rejected (500)" },
-          { item: "Salt to taste", ok: true },
+          { item: "20 g All Purpose Flour", status: "added" },
+          { item: "¾ lb Chicken Breast", status: "failed", error: "AnyList rejected (500)" },
+          { item: "Salt to taste", status: "merged" },
         ],
         sent: 2,
+        merged: 1,
         failed: 1,
       },
       error: null,
@@ -202,7 +207,9 @@ describe("RecipeAnyListSheet", () => {
 
     const vm = wrapper.vm as unknown as SheetVm;
     expect(vm.singleListMode).toBe(true);
-    expect((document.body.querySelector(".fork-anylist__pinned") || {}).textContent).toContain("→ Shared Grocery List");
+    // The header says what every item will be tagged with (PROMPT Q).
+    expect((document.body.querySelector(".fork-anylist__pinned") || {}).textContent)
+      .toContain("→ Shared Grocery List · Garlic Sauce");
     expect(document.body.querySelector(".fork-anylist .v-select")).toBeNull();
 
     vm.toggleAll();
@@ -212,5 +219,40 @@ describe("RecipeAnyListSheet", () => {
     expect(list).toBe("Shared Grocery List");
     // No last-used memory in pinned mode — there is nothing to remember.
     expect(window.localStorage.getItem("fork.anylist.lastList")).toBeNull();
+  });
+
+  test("picker mode names the recipe tag too", async () => {
+    const wrapper = build(0.5);
+    await settle(wrapper);
+    expect(document.body.textContent).toContain("Tagged with Garlic Sauce");
+  });
+
+  test.each([
+    [0, "2 items → Shared Grocery List"],
+    [1, "2 items → Shared Grocery List (1 merged)"],
+  ])("toast with %i merged reads %s", async (merged, expected) => {
+    listsHolder.names = ["Shared Grocery List"];
+    vi.mocked(alert.success).mockClear();
+    sendMock.mockResolvedValueOnce({
+      data: {
+        recipe: { name: "Garlic Sauce", url: null },
+        results: [
+          { item: "20 g All Purpose Flour", status: merged ? "merged" : "added" },
+          { item: "¾ lb Chicken Breast", status: "added" },
+        ],
+        sent: 2,
+        merged,
+        failed: 0,
+      },
+      error: null,
+    });
+
+    const wrapper = build(0.5);
+    await settle(wrapper);
+    const vm = wrapper.vm as unknown as SheetVm;
+    vm.toggleAll();
+    await wrapper.vm.$nextTick();
+    await vm.send();
+    expect(alert.success).toHaveBeenCalledWith(expected);
   });
 });
