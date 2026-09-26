@@ -229,10 +229,12 @@ export default defineNuxtConfig({
 
   // PWA module configuration: https://vite-pwa-org.netlify.app/frameworks/nuxt.html
   pwa: {
-    // "prompt", not "autoUpdate": autoUpdate + skipWaiting swapped the SW underneath open tabs
-    // while their in-memory code stayed old — the exact staleness that has produced three false
-    // "it's not fixed" reports. Now the new SW WAITS, the app shows "new version — reload"
-    // (PwaReloadPrompt.vue), and updating is an explicit, visible act.
+    // "prompt", not "autoUpdate": autoUpdate force-reloads open tabs mid-use. But the SW itself
+    // must NOT wait (skipWaiting below): a waiting worker stays waiting as long as any tab is
+    // open, and on 2026-09-26 a phone was still running a pre-PROMPT-Q frontend against the new
+    // API. Now a new build activates on the next load, and PwaReloadPrompt.vue shows "new
+    // version — reload" to tabs that were already open (watchForNewBuild: controllerchange +
+    // Nuxt's build-id check), so no tab runs old code silently.
     registerType: "prompt",
     devOptions: {
       enabled: false,
@@ -263,6 +265,7 @@ export default defineNuxtConfig({
         },
       ],
       cleanupOutdatedCaches: true,
+      skipWaiting: true,
       clientsClaim: true,
     },
     client: {

@@ -26,7 +26,9 @@ vi.mock("~/composables/api", () => ({
   useUserApi: () => ({ anylist: { send: sendMock, getLists: vi.fn(async () => ({ data: { lists: listsHolder.names } })) } }),
 }));
 
-vi.mock("~/composables/recipes/use-anylist", () => ({
+vi.mock("~/composables/recipes/use-anylist", async importOriginal => ({
+  // Real error-message mapping; only the stateful composable is faked.
+  anylistSendErrorMessage: (await importOriginal<typeof import("~/composables/recipes/use-anylist")>()).anylistSendErrorMessage,
   useAnyList: () => ({
     available: ref(true),
     lists: { get value() { return listsHolder.names; } },
@@ -254,5 +256,36 @@ describe("RecipeAnyListSheet", () => {
     await wrapper.vm.$nextTick();
     await vm.send();
     expect(alert.success).toHaveBeenCalledWith(expected);
+  });
+  test("a 422 (stale page vs newer server) says refresh, not bridge unreachable", async () => {
+    vi.mocked(alert.error).mockClear();
+    sendMock.mockResolvedValueOnce({
+      data: null,
+      error: { response: { status: 422, data: { detail: [{ msg: "Field required" }] } } },
+    });
+    const wrapper = build(0.5);
+    await settle(wrapper);
+    const vm = wrapper.vm as unknown as SheetVm;
+    vm.toggleAll();
+    await wrapper.vm.$nextTick();
+    await vm.send();
+    expect(alert.error).toHaveBeenCalledWith("This app is out of date. Refresh the page and try again.");
+  });
+});
+
+describe("anylistSendErrorMessage", () => {
+  const err = (status: number, message?: string) => ({ response: { status, data: { detail: message ? { message } : undefined } } });
+
+  test.each([
+    [err(422), "This app is out of date. Refresh the page and try again."],
+    [err(400, "AnyList list not allowed; this install sends only to \"Shared Grocery List\"."), "AnyList list not allowed; this install sends only to \"Shared Grocery List\"."],
+    [err(400), "Refresh the page and try again."],
+    [err(404, "AnyList send: recipe not found."), "AnyList send: recipe not found."],
+    [err(502, "AnyList bridge unreachable."), "AnyList bridge unreachable. Nothing was sent."],
+    [err(500), "Send failed (500)."],
+    [{ message: "Network Error" }, "Couldn't reach Mealie. Nothing was sent."],
+  ])("maps %o", async (error, expected) => {
+    const { anylistSendErrorMessage } = await vi.importActual<typeof import("~/composables/recipes/use-anylist")>("~/composables/recipes/use-anylist");
+    expect(anylistSendErrorMessage(error)).toBe(expected);
   });
 });

@@ -20,8 +20,10 @@ class AnyListSendRequest(MealieModel):
     items: list[str] = Field(min_length=1)
     list_name: str = Field(alias="list", min_length=1)
     # Only the slug crosses the wire: the note's name and URL are resolved and built
-    # server-side, never taken from the client.
-    recipe: AnyListRecipeRef
+    # server-side, never taken from the client. Optional ONLY for pre-Q frontends still
+    # cached on a device: they send no recipe, and a 422 there reached the user as
+    # "bridge unreachable". Current clients always send it.
+    recipe: AnyListRecipeRef | None = None
 
 
 class AnyListItemStatus(StrEnum):
@@ -42,7 +44,7 @@ class AnyListRecipeTag(MealieModel):
 
 
 class AnyListSendResult(MealieModel):
-    recipe: AnyListRecipeTag
+    recipe: AnyListRecipeTag | None = None
     results: list[AnyListItemResult]
     sent: int
     merged: int

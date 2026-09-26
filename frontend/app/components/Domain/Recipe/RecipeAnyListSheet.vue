@@ -83,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { useAnyList } from "~/composables/recipes/use-anylist";
+import { anylistSendErrorMessage, useAnyList } from "~/composables/recipes/use-anylist";
 import { useIngredientTextParser } from "~/composables/recipes";
 import { useUserApi } from "~/composables/api";
 import { alert } from "~/composables/use-toast";
@@ -173,7 +173,7 @@ async function send() {
   sending.value = false;
 
   if (error || !data) {
-    alert.error("AnyList bridge unreachable — nothing was sent.");
+    alert.error(anylistSendErrorMessage(error));
     return;
   }
 

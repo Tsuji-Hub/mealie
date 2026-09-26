@@ -129,10 +129,42 @@ def test_anylist_pinned_lists_answer_without_touching_the_bridge(
 # Send: validation and error taxonomy
 
 
-def test_anylist_send_requires_recipe_slug(api_client: TestClient, unique_user: TestUser, monkeypatch: MonkeyPatch):
+def test_anylist_send_without_recipe_sends_untagged(
+    api_client: TestClient, unique_user: TestUser, monkeypatch: MonkeyPatch
+):
+    # A pre-Q frontend cached on a phone sends no `recipe`. That used to 422, which the old
+    # client showed as "bridge unreachable". Now: items go through with no note.
     enable_bridge(monkeypatch)
+    set_base(monkeypatch)
+    seen: list[dict] = []
+
+    def fake_post(url, json=None, **kwargs):
+        seen.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr(controller_anylist.requests, "post", fake_post)
+
+    response = api_client.post(
+        SEND_ROUTE, json={"items": ["2 eggs", "1 lemon"], "list": "Groceries"}, headers=unique_user.token
+    )
+    data = assert_deserialize(response, 200)
+    assert data["sent"] == 2 and data["failed"] == 0
+    assert data["recipe"] is None
+    assert all("notes" not in payload for payload in seen)
+
+
+def test_anylist_untagged_resend_unchecks_without_touching_notes(
+    api_client: TestClient, unique_user: TestUser, monkeypatch: MonkeyPatch
+):
+    enable_bridge(monkeypatch)
+    bridge = FakeBridge([{"id": "a", "name": "2 eggs", "notes": "Chicken Tikka\nhttps://x/r/t", "checked": True}])
+    install(monkeypatch, bridge)
+
     response = api_client.post(SEND_ROUTE, json={"items": ["2 eggs"], "list": "Groceries"}, headers=unique_user.token)
-    assert response.status_code == 422
+    assert assert_deserialize(response, 200)["results"][0]["status"] == "merged"
+    assert bridge.updates == [
+        {"id": "a", "list": "Groceries", "notes": "Chicken Tikka\nhttps://x/r/t", "checked": False}
+    ]
 
 
 def test_anylist_send_unknown_recipe_is_404(api_client: TestClient, unique_user: TestUser, monkeypatch: MonkeyPatch):

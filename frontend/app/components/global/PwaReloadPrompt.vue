@@ -32,15 +32,40 @@
 </template>
 
 <script setup lang="ts">
-const { $pwa } = useNuxtApp();
+import { watchForNewBuild } from "~/composables/use-app-update";
+
+const nuxtApp = useNuxtApp();
+const { $pwa } = nuxtApp;
 
 const dismissed = ref(false);
+const newBuild = ref(false);
 
-const needRefresh = computed(() => !!$pwa?.needRefresh && !dismissed.value);
+// The service worker now skips waiting (nuxt.config.ts), so vite-pwa's needRefresh stays
+// false; the prompt is driven by watchForNewBuild instead. needRefresh is kept for safety.
+const needRefresh = computed(() => (!!$pwa?.needRefresh || newBuild.value) && !dismissed.value);
+
+let stopWatching: (() => void) | undefined;
+onMounted(() => {
+  stopWatching = watchForNewBuild({
+    container: typeof navigator !== "undefined" && "serviceWorker" in navigator ? navigator.serviceWorker : null,
+    onBuildChanged: callback => nuxtApp.hook("app:manifest:update", callback),
+    onNewBuild: () => {
+      newBuild.value = true;
+      dismissed.value = false;
+    },
+  });
+});
+onUnmounted(() => stopWatching?.());
 
 async function reload() {
-  // Tells the waiting service worker to skipWaiting, then reloads onto the new bundle.
-  await $pwa?.updateServiceWorker(true);
+  if ($pwa?.needRefresh) {
+    // A waiting worker (only possible from an older SW build): activate it, then reload.
+    await $pwa.updateServiceWorker(true);
+    return;
+  }
+  // The new worker is already active and controlling this page; a plain reload loads the
+  // new shell and chunks.
+  window.location.reload();
 }
 
 function dismiss() {

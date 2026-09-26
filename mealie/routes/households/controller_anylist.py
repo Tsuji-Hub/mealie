@@ -137,23 +137,33 @@ class AnyListController(BaseUserController):
                 ),
             )
 
-        # Resolve the recipe inside the caller's group, same scope as the recipe routes. The
-        # note's name and URL are built from THIS record, never from client-supplied text.
-        try:
-            recipe = RecipeService(self.repos, self.user, self.household, translator=self.translator).get_one(
-                data.recipe.slug
-            )
-        except NoEntryFound as e:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND,
-                detail=ErrorResponse.respond(message="AnyList send: recipe not found."),
-            ) from e
+        # No recipe = a pre-Q frontend still cached on some device. Send the items untagged
+        # rather than 422: the old client reports any error as "bridge unreachable", which
+        # sends the diagnosis to the wrong place. Logged so stale clients stay visible.
+        recipe_tag: AnyListRecipeTag | None = None
+        note: str | None = None
+        marker: str | None = None
+        if data.recipe is None:
+            self.logger.warning("AnyList send without recipe (outdated client): sending items with no note")
+        else:
+            # Resolve inside the caller's group, same scope as the recipe routes. The note's
+            # name and URL are built from THIS record, never from client-supplied text.
+            try:
+                recipe = RecipeService(self.repos, self.user, self.household, translator=self.translator).get_one(
+                    data.recipe.slug
+                )
+            except NoEntryFound as e:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND,
+                    detail=ErrorResponse.respond(message="AnyList send: recipe not found."),
+                ) from e
 
-        base = _public_base_url()
-        recipe_url = urls.recipe_url(self.group.slug, recipe.slug, base) if base else None
-        note = recipe_note(recipe.name or recipe.slug, recipe_url)
-        # What proves "this recipe is already tagged on the item": the URL when there is one.
-        marker = recipe_url or note
+            base = _public_base_url()
+            recipe_url = urls.recipe_url(self.group.slug, recipe.slug, base) if base else None
+            recipe_tag = AnyListRecipeTag(name=recipe.name or recipe.slug, url=recipe_url)
+            note = recipe_note(recipe_tag.name, recipe_url)
+            # What proves "this recipe is already tagged on the item": the URL when there is one.
+            marker = recipe_url or note
 
         # A 304 from /add means an item with that exact name is already on the list. Fetch
         # the list's items at most ONCE per send, however many items come back 304.
@@ -182,7 +192,8 @@ class AnyListController(BaseUserController):
                 )
 
             current = existing_notes(existing)
-            already_tagged = marker in current
+            # No note to add (untagged send from an old client) counts as already tagged.
+            already_tagged = note is None or (marker is not None and marker in current)
             # Every sent item ends up unchecked: a re-send means Mom needs to buy it again.
             if already_tagged and not existing.get("checked"):
                 return AnyListItemResult(item=item, status=AnyListItemStatus.merged)
@@ -201,11 +212,10 @@ class AnyListController(BaseUserController):
 
         def add_item(item: str) -> AnyListItemResult:
             try:
-                response = requests.post(
-                    f"{url}/add",
-                    json={"name": item, "list": data.list_name, "notes": note},
-                    timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
-                )
+                payload: dict[str, Any] = {"name": item, "list": data.list_name}
+                if note is not None:
+                    payload["notes"] = note
+                response = requests.post(f"{url}/add", json=payload, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT))
                 if response.status_code == 304:
                     return merge_existing(item)
             except requests.RequestException:
@@ -231,7 +241,7 @@ class AnyListController(BaseUserController):
         added = sum(1 for r in results if r.status == AnyListItemStatus.added)
         merged = sum(1 for r in results if r.status == AnyListItemStatus.merged)
         return AnyListSendResult(
-            recipe=AnyListRecipeTag(name=recipe.name or recipe.slug, url=recipe_url),
+            recipe=recipe_tag,
             results=results,
             sent=added + merged,
             merged=merged,
