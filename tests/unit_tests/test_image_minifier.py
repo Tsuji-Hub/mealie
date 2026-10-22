@@ -72,3 +72,24 @@ def test_tiny_source_is_left_alone(tmp_path):
 
     with Image.open(tmp_path / "tiny-original.webp") as img:
         assert (img.width, img.height) == (150, 150)
+
+
+def test_heic_source_minifies_through_pillow_heif(tmp_path):
+    """Phones upload HEIC; minify.py relies on pillow-heif's registered opener. Pins that the
+    pillow-heif build we ship still decodes under the pinned Pillow major."""
+    import pillow_heif
+
+    jpg = make_source(tmp_path, 300, 400)
+    source = tmp_path / "upload.heic"
+    with Image.open(jpg) as img:
+        pillow_heif.from_pillow(img).save(source, quality=90)
+
+    PillowMinifier(purge=False).minify(source, force=True)
+
+    for name in ("original", "min-original", "tiny-original"):
+        file = tmp_path / f"{name}.webp"
+        assert file.exists(), f"{name} missing"
+        with Image.open(file) as img:
+            img.load()
+            assert img.format == "WEBP"
+            assert img.width <= 300 and img.height <= 400
