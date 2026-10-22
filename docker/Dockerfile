@@ -1,7 +1,7 @@
 ###############################################
 # Frontend Build
 ###############################################
-FROM node:24@sha256:392e1e23f34da768d8d1f4e502b64f200d3be3465934d4b7930f57d7e2fc1989 \
+FROM node:24@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a \
     AS frontend-builder
 
 WORKDIR /frontend
@@ -21,7 +21,7 @@ RUN yarn generate
 ###############################################
 # Base Image - Python
 ###############################################
-FROM python:3.12-slim@sha256:7026274c107626d7e940e0e5d6730481a4600ae95d5ca7eb532dd4180313fea9 \
+FROM python:3.12-slim@sha256:cb33f7f771ecec2ef1225cf39b159591a040391bd73e4c01f00fdfc4c47611d2 \
     AS python-base
 
 ENV MEALIE_HOME="/app"
@@ -124,6 +124,7 @@ ARG COMMIT
 ENV GIT_COMMIT_HASH=$COMMIT
 
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install --no-install-recommends -y \
     curl \
     ffmpeg \
