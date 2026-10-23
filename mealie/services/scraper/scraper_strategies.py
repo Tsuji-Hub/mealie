@@ -18,6 +18,7 @@ from w3lib.html import get_base_url
 from yt_dlp.extractor.generic import GenericIE
 
 from mealie.core import exceptions
+from mealie.core.config import get_app_settings
 from mealie.core.dependencies.dependencies import get_temporary_path
 from mealie.core.root_logger import get_logger
 from mealie.lang.providers import Translator
@@ -80,7 +81,7 @@ async def safe_scrape_html(url: str) -> str:
         transport = safehttp.AsyncSafeTransport(
             impersonate=impersonation,
             default_headers=True,
-            verify=False,  # disable SSL verification since we can handle untrusted data and some sites don't have certs
+            insecure_hosts=get_app_settings().scraper_tls_insecure_hosts,
         )
         async with AsyncClient(transport=transport) as client:
             async with client.stream(
@@ -462,7 +463,11 @@ class RecipeScraperTikTokOEmbed(RecipeScraperOpenAI):
         here puts the canonical URL back in front of the normaliser.
         """
         try:
-            transport = safehttp.AsyncSafeTransport(impersonate="chrome", default_headers=True, verify=False)
+            transport = safehttp.AsyncSafeTransport(
+                impersonate="chrome",
+                default_headers=True,
+                insecure_hosts=get_app_settings().scraper_tls_insecure_hosts,
+            )
             async with AsyncClient(transport=transport) as client:
                 response = await client.get(url, timeout=SCRAPER_TIMEOUT, follow_redirects=True)
                 return str(response.url) or url
@@ -480,7 +485,10 @@ class RecipeScraperTikTokOEmbed(RecipeScraperOpenAI):
             return None
 
         try:
-            transport = safehttp.AsyncSafeTransport(default_headers=True, verify=False)
+            transport = safehttp.AsyncSafeTransport(
+                default_headers=True,
+                insecure_hosts=get_app_settings().scraper_tls_insecure_hosts,
+            )
             async with AsyncClient(transport=transport) as client:
                 response = await client.get(
                     OEMBED_ENDPOINT,

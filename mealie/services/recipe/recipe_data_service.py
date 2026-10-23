@@ -6,6 +6,7 @@ from pathlib import Path
 from httpx import AsyncClient, Response
 from pydantic import UUID4
 
+from mealie.core.config import get_app_settings
 from mealie.pkgs import img, safehttp
 from mealie.schema.recipe.recipe import Recipe
 from mealie.schema.recipe.recipe_image_types import RecipeImageTypes
@@ -34,7 +35,10 @@ async def largest_content_len(urls: list[str]) -> tuple[str, int]:
     async def do(client: AsyncClient, url: str) -> Response:
         return await client.head(url)
 
-    async with AsyncClient(transport=safehttp.AsyncSafeTransport(impersonate="chrome")) as client:
+    transport = safehttp.AsyncSafeTransport(
+        impersonate="chrome", insecure_hosts=get_app_settings().scraper_tls_insecure_hosts
+    )
+    async with AsyncClient(transport=transport) as client:
         tasks = [do(client, url) for url in urls]
         responses: list[Response] = await gather_with_concurrency(max_concurrency, *tasks, ignore_exceptions=True)
         for response in responses:
@@ -146,7 +150,10 @@ class RecipeDataService(BaseService):
         file_name = f"{self.recipe_id!s}.{ext}"
         file_path = Recipe.directory_from_id(self.recipe_id).joinpath("images", file_name)
 
-        async with AsyncClient(transport=safehttp.AsyncSafeTransport(impersonate="chrome")) as client:
+        transport = safehttp.AsyncSafeTransport(
+            impersonate="chrome", insecure_hosts=get_app_settings().scraper_tls_insecure_hosts
+        )
+        async with AsyncClient(transport=transport) as client:
             try:
                 r = await client.get(image_url_str)
             except Exception:

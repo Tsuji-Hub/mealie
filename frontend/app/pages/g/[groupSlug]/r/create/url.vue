@@ -89,54 +89,63 @@
         color="error"
         class="mt-6 white--text"
       >
-        <v-card-title class="ma-0 pa-0">
-          <v-icon
-            start
-            color="white"
-            size="x-large"
-          >
-            {{ $globals.icons.robot }}
-          </v-icon>
-          {{ $t("new-recipe.error-title") }}
-        </v-card-title>
-        <v-divider class="my-3 mx-2" />
+        <p
+          v-if="state.tlsError"
+          class="force-url-white mb-0"
+          data-testid="tls-verification-failed"
+        >
+          {{ $t("new-recipe.tls-verification-failed") }}
+        </p>
+        <template v-else>
+          <v-card-title class="ma-0 pa-0">
+            <v-icon
+              start
+              color="white"
+              size="x-large"
+            >
+              {{ $globals.icons.robot }}
+            </v-icon>
+            {{ $t("new-recipe.error-title") }}
+          </v-card-title>
+          <v-divider class="my-3 mx-2" />
 
-        <div class="force-url-white">
-          <p>
-            {{ $t("recipe.scrape-recipe-website-being-blocked") }}
-            <router-link :to="htmlOrJsonImporterTarget">{{ $t("recipe.scrape-recipe-try-importing-raw-html-instead") }}</router-link>
-          </p>
-          <br>
-          <p>
-            {{ $t("new-recipe.error-details") }}
-          </p>
-        </div>
-        <div class="d-flex row justify-space-around my-3 force-url-white">
-          <a
-            class="dark text-primary"
-            href="https://developers.google.com/search/docs/data-types/recipe"
-            target="_blank"
-            rel="noreferrer nofollow"
-          >
-            {{ $t("new-recipe.google-ld-json-info") }}
-          </a>
-          <a
-            class="text-primary"
-            href="https://github.com/mealie-recipes/mealie/issues"
-            target="_blank"
-            rel="noreferrer nofollow"
-          >
-            {{ $t("new-recipe.github-issues") }}
-          </a>
-          <a
-            class="text-primary"
-            href="https://schema.org/Recipe"
-            target="_blank"
-            rel="noreferrer nofollow"
-          >
-            {{ $t("new-recipe.recipe-markup-specification") }}
-          </a>
-        </div>
+          <div class="force-url-white">
+            <p>
+              {{ $t("recipe.scrape-recipe-website-being-blocked") }}
+              <router-link :to="htmlOrJsonImporterTarget">{{ $t("recipe.scrape-recipe-try-importing-raw-html-instead") }}</router-link>
+            </p>
+            <br>
+            <p>
+              {{ $t("new-recipe.error-details") }}
+            </p>
+          </div>
+          <div class="d-flex row justify-space-around my-3 force-url-white">
+            <a
+              class="dark text-primary"
+              href="https://developers.google.com/search/docs/data-types/recipe"
+              target="_blank"
+              rel="noreferrer nofollow"
+            >
+              {{ $t("new-recipe.google-ld-json-info") }}
+            </a>
+            <a
+              class="text-primary"
+              href="https://github.com/mealie-recipes/mealie/issues"
+              target="_blank"
+              rel="noreferrer nofollow"
+            >
+              {{ $t("new-recipe.github-issues") }}
+            </a>
+            <a
+              class="text-primary"
+              href="https://schema.org/Recipe"
+              target="_blank"
+              rel="noreferrer nofollow"
+            >
+              {{ $t("new-recipe.recipe-markup-specification") }}
+            </a>
+          </div>
+        </template>
       </v-alert>
     </v-expand-transition>
   </div>
@@ -157,6 +166,7 @@ definePageMeta({
 });
 const state = reactive({
   error: false,
+  tlsError: false,
   loading: false,
 });
 
@@ -264,13 +274,14 @@ async function createByUrl(url: string | null, importKeywordsAsTags: boolean, im
     return;
   }
   state.loading = true;
-  const { response } = await api.recipes.createOneByUrl(
+  const { response, error } = await api.recipes.createOneByUrl(
     url,
     importKeywordsAsTags,
     importCategories,
     (message: string) => createStatus.value = message,
   );
   createStatus.value = null;
+  state.tlsError = error?.message === "TLS_VERIFICATION_FAILED";
   handleResponse(response, importKeywordsAsTags);
 }
 </script>

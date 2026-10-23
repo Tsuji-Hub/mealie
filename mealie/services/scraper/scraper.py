@@ -21,6 +21,13 @@ class ParserErrors(StrEnum):
     BAD_RECIPE_DATA = "BAD_RECIPE_DATA"
     NO_RECIPE_DATA = "NO_RECIPE_DATA"
     CONNECTION_ERROR = "CONNECTION_ERROR"
+    TLS_VERIFICATION_FAILED = "TLS_VERIFICATION_FAILED"
+
+
+TLS_VERIFICATION_FAILED_MESSAGE = (
+    "This site's security certificate couldn't be verified, so the recipe wasn't imported."
+)
+"""User-facing text for ParserErrors.TLS_VERIFICATION_FAILED (the frontend shows its own i18n copy of it)."""
 
 
 async def create_from_html(

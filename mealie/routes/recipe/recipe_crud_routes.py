@@ -28,6 +28,7 @@ from mealie.core.dependencies import (
     get_temporary_zip_path,
 )
 from mealie.pkgs import cache
+from mealie.pkgs.safehttp import CertificateVerificationError
 from mealie.repos.all_repositories import get_repositories
 from mealie.routes._base import controller
 from mealie.routes._base.routers import MealieCrudRoute, UserAPIRouter
@@ -71,7 +72,7 @@ from mealie.services.recipe.recipe_data_service import (
 )
 from mealie.services.scraper.recipe_bulk_scraper import RecipeBulkScraperService
 from mealie.services.scraper.scraped_extras import ScraperContext
-from mealie.services.scraper.scraper import create_from_html
+from mealie.services.scraper.scraper import TLS_VERIFICATION_FAILED_MESSAGE, ParserErrors, create_from_html
 from mealie.services.scraper.scraper_strategies import (
     ForceTimeoutException,
     RecipeScraperOpenAI,
@@ -138,6 +139,13 @@ class RecipeController(BaseRecipeController):
             raise HTTPException(
                 status_code=408, detail=ErrorResponse.respond(message="Recipe Scraping Timed Out")
             ) from e
+        except CertificateVerificationError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=ErrorResponse.respond(
+                    message=TLS_VERIFICATION_FAILED_MESSAGE, exception=ParserErrors.TLS_VERIFICATION_FAILED.value
+                ),
+            ) from e
 
         return "recipe_scrapers was unable to scrape this URL"
 
@@ -152,7 +160,7 @@ class RecipeController(BaseRecipeController):
             if isinstance(event.data, SSEDataEventDone):
                 return event.data.slug
             if isinstance(event.data, SSEDataEventMessage) and event.event == SSEDataEventStatus.ERROR:
-                raise HTTPException(status_code=400, detail=ErrorResponse.respond(message=event.data.message))
+                raise HTTPException(status_code=400, detail=self._web_error_response(event.data.message))
 
         # This should never be reachable, since we should always hit DONE or hit an exception/ERROR
         raise HTTPException(status_code=500, detail=ErrorResponse.respond(message="Unknown Error"))
@@ -178,7 +186,7 @@ class RecipeController(BaseRecipeController):
             if isinstance(event.data, SSEDataEventDone):
                 return event.data.slug
             if isinstance(event.data, SSEDataEventMessage) and event.event == SSEDataEventStatus.ERROR:
-                raise HTTPException(status_code=400, detail=ErrorResponse.respond(message=event.data.message))
+                raise HTTPException(status_code=400, detail=self._web_error_response(event.data.message))
 
         # This should never be reachable, since we should always hit DONE or hit an exception/ERROR
         raise HTTPException(status_code=500, detail=ErrorResponse.respond(message="Unknown Error"))
@@ -233,10 +241,15 @@ class RecipeController(BaseRecipeController):
                     )
                 )
             except Exception as e:
-                self.logger.exception("Error in streaming recipe creation")
+                if isinstance(e, CertificateVerificationError):
+                    # Expected outcome, already logged at WARNING with the host and the ssl error.
+                    message = ParserErrors.TLS_VERIFICATION_FAILED.value
+                else:
+                    self.logger.exception("Error in streaming recipe creation")
+                    message = e.__class__.__name__
                 await queue.put(
                     ServerSentEvent(
-                        data=SSEDataEventMessage(message=e.__class__.__name__),
+                        data=SSEDataEventMessage(message=message),
                         event=SSEDataEventStatus.ERROR,
                     )
                 )
@@ -246,6 +259,12 @@ class RecipeController(BaseRecipeController):
         asyncio.create_task(run())
         while (event := await queue.get()) is not None:
             yield event
+
+    @staticmethod
+    def _web_error_response(message: str) -> dict:
+        if message == ParserErrors.TLS_VERIFICATION_FAILED:
+            return ErrorResponse.respond(message=TLS_VERIFICATION_FAILED_MESSAGE, exception=message)
+        return ErrorResponse.respond(message=message)
 
     def _finish_recipe_from_web(self, req: ScrapeRecipe | ScrapeRecipeData, recipe: Recipe, extras: object) -> str:
         if req.include_tags:

@@ -1,5 +1,7 @@
+import ipaddress
 import logging
 import os
+import re
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,8 @@ from mealie.core.settings.themes import Theme
 
 from .db_providers import AbstractDBProvider, db_provider_factory
 from .static import PACKAGE_DIR
+
+_HOST_NAME_RE = re.compile(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*")
 
 
 class ScheduleTime(NamedTuple):
@@ -271,6 +275,42 @@ class AppSettings(AppLoggingSettings):
     user has (including private ones), so when set, /lists returns only this name without
     asking the bridge — the account's other list names never reach any browser — and /send
     rejects any other target. Unset keeps the generic full-account picker behavior."""
+
+    # ===============================================
+    # Fork: scraper TLS
+
+    SCRAPER_TLS_INSECURE_HOSTS: str = ""
+    """Fork: comma-separated host names the scraper may fetch WITHOUT verifying the TLS certificate.
+    Everything else is verified against the certifi bundle. Exact, case-insensitive host match only:
+    no wildcards, no IP addresses, no ports or paths (a bad entry fails startup rather than being
+    silently ignored). Every request that skips verification is logged at WARNING."""
+
+    @field_validator("SCRAPER_TLS_INSECURE_HOSTS")
+    @classmethod
+    def validate_scraper_tls_insecure_hosts(cls, v: str) -> str:
+        hosts = []
+        for raw in v.split(","):
+            host = raw.strip().lower().rstrip(".")
+            if not host:
+                continue
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                pass
+            else:
+                raise ValueError(f"SCRAPER_TLS_INSECURE_HOSTS takes host names, not IP addresses: {raw.strip()!r}")
+            if not _HOST_NAME_RE.fullmatch(host):
+                raise ValueError(
+                    "SCRAPER_TLS_INSECURE_HOSTS entry is not a plain host name (no wildcards/ports/paths): "
+                    f"{raw.strip()!r}"
+                )
+            hosts.append(host)
+        return ",".join(dict.fromkeys(hosts))
+
+    @property
+    def scraper_tls_insecure_hosts(self) -> frozenset[str]:
+        """The validated SCRAPER_TLS_INSECURE_HOSTS entries, lowercased."""
+        return frozenset(host for host in self.SCRAPER_TLS_INSECURE_HOSTS.split(",") if host)
 
     # ===============================================
     # Email Configuration
