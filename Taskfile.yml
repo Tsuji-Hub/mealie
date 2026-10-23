@@ -153,7 +153,7 @@ tasks:
     desc: Generate requirements file to pin all packages, effectively a "pip freeze" before installation begins
     internal: true
     cmds:
-      - uv export --no-editable --no-emit-project --extra pgsql --format requirements-txt --output-file dist/requirements.txt
+      - uv export --no-editable --no-emit-project --no-dev --extra pgsql --format requirements-txt --output-file dist/requirements.txt
       # Include mealie in the requirements, hashing the package that was just built to ensure it's the one installed
       - echo "mealie[pgsql]=={{.MEALIE_VERSION}} \\" >> dist/requirements.txt
       - pip hash dist/mealie-{{.MEALIE_VERSION}}-py3-none-any.whl | tail -n1 | tr -d '\n' >> dist/requirements.txt
