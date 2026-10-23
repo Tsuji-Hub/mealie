@@ -146,6 +146,13 @@ ENV NLTK_DATA="/nltk_data/"
 COPY ./docker/setup_nltk_data.sh $MEALIE_HOME/setup_nltk_data.sh
 RUN chmod +x $MEALIE_HOME/setup_nltk_data.sh && $MEALIE_HOME/setup_nltk_data.sh
 
+# Nothing at runtime installs packages, so drop pip (and setuptools/wheel if present) from the
+# venv and the system Python. pip vendors its own msgpack/urllib3/pkg_resources copies, which
+# scanners flag and our lockfile can't move. Builder stages keep pip.
+RUN $VENV_PATH/bin/python -m pip uninstall -y pip setuptools wheel \
+    && /usr/local/bin/python -m pip uninstall -y pip setuptools wheel \
+    && rm -f $VENV_PATH/bin/pip* /usr/local/bin/pip*
+
 VOLUME [ "$MEALIE_HOME/data/" ]
 ENV APP_PORT=9000
 
