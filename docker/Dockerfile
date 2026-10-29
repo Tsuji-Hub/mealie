@@ -124,7 +124,7 @@ ARG COMMIT
 ENV GIT_COMMIT_HASH=$COMMIT
 
 RUN apt-get update \
-    && apt-get upgrade -y \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install --no-install-recommends -y \
     curl \
     ffmpeg \
