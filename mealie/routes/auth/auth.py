@@ -28,6 +28,7 @@ logger = root_logger.get_logger("auth")
 
 
 settings = get_app_settings()
+oauth: OAuth | None = None
 if settings.OIDC_READY:
     oauth = OAuth(cache=AuthCache())
     scope = None
@@ -91,10 +92,7 @@ def get_token(request: Request, data: CredentialsRequestForm = Depends(), sessio
 @public_router.get("/oauth")
 async def oauth_login(request: Request):
     if not oauth:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not initialize OAuth client",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OIDC not configured")
     client = oauth.create_client("oidc")
     redirect_url = None
     if not settings.PRODUCTION:
@@ -115,10 +113,7 @@ async def oauth_login(request: Request):
 @public_router.get("/oauth/callback")
 async def oauth_callback(request: Request, session: Session = Depends(generate_session)):
     if not oauth:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Could not initialize OAuth client",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OIDC not configured")
     client = oauth.create_client("oidc")
 
     token = await client.authorize_access_token(request)
